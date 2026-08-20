@@ -1,0 +1,6 @@
+@DuelloLab.Api_HostAddress = http://localhost:5022
+
+GET {{DuelloLab.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
