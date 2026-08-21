@@ -8,13 +8,14 @@ import {
   type RoomUserInfo,
   type MatchStartingData,
   type PlayerProgressData,
+  type PlayerFinishedData,
   type MatchPlayerResult,
   type MatchEndedData
 } from '../api/rooms';
 import { type SoloQuestion } from '../api/exams';
 import LiveStatusBadge from '../components/LiveStatusBadge';
 
-type ViewMode = 'lobby' | 'countdown' | 'match' | 'results';
+type ViewMode = 'lobby' | 'countdown' | 'match' | 'waiting' | 'results';
 
 export default function LobbyPage() {
   const { roomCode } = useParams<{ roomCode: string }>();
@@ -51,6 +52,7 @@ export default function LobbyPage() {
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const timerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const autoSubmittedRef = useRef(false);
+
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -191,21 +193,23 @@ export default function LobbyPage() {
         [data.userId]: data
       }));
     };
-
-    const handlePlayerFinished = (data: MatchPlayerResult) => {
+    const handlePlayerFinished = (data: PlayerFinishedData) => {
       console.log('🏁 [Gameplay] Player finished:', data);
-      showToast(`🏆 ${data.username} sınavı bitirdi! (${data.netScore.toFixed(1)} Net)`);
 
-      setLeaderboard(prev => {
-        const filtered = prev.filter(p => p.userId !== data.userId);
-        const updated = [...filtered, data];
-        return updated.sort((a, b) => b.netScore - a.netScore || a.durationMs - b.durationMs);
+      showToast(`🏁 ${data.username} sınavı tamamladı.`);
+
+      setRoom(prev => {
+        if (!prev) return prev;
+
+        return {
+          ...prev,
+          users: prev.users.map(roomUser =>
+            roomUser.userId === data.userId
+              ? { ...roomUser, isFinished: true }
+              : roomUser
+          )
+        };
       });
-
-      if (data.userId === user?.id) {
-        setMyResult(data);
-        refreshUser();
-      }
     };
 
     const handleMatchEnded = (data: MatchEndedData) => {
@@ -246,7 +250,10 @@ export default function LobbyPage() {
 
   // Synchronized Server Elapsed & Countdown Timer
   useEffect(() => {
-    if (viewMode === 'match' && matchStartTime) {
+    if (
+      (viewMode === 'match' || viewMode === 'waiting') &&
+      matchStartTime
+    ) {
       timerIntervalRef.current = setInterval(() => {
         const now = new Date();
         const diffSec = Math.max(0, Math.floor((now.getTime() - matchStartTime.getTime()) / 1000));
@@ -271,15 +278,24 @@ export default function LobbyPage() {
   // Auto-submit when time expires
   const handleAutoSubmitOnTimeUp = async () => {
     if (!connection || !roomCode) return;
-    try {
-      const payload = Object.entries(answers).map(([qId, choice]) => ({
-        questionId: qId,
-        selectedAnswer: choice
-      }));
-      await connection.invoke('SubmitMatch', roomCode, payload);
-      await connection.invoke('ForceTimeUp', roomCode);
-    } catch (e) {
-      console.warn('Auto submit timeup fallback:', e);
+
+    const maxAttempts = 3;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        await connection.invoke('ForceTimeUp', roomCode);
+        return;
+      } catch (e) {
+        if (attempt === maxAttempts) {
+          console.warn(
+            'ForceTimeUp failed after all retry attempts:',
+            e
+          );
+          return;
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 750));
+      }
     }
   };
 
@@ -315,7 +331,7 @@ export default function LobbyPage() {
     const answeredCount = Object.values(newAnswers).filter(a => a !== null).length;
 
     if (connection && roomCode && connection.state === 'Connected') {
-      connection.invoke('UpdateProgress', roomCode, currentQuestionIndex, answeredCount, questionId, newChoice).catch(() => {});
+      connection.invoke('UpdateProgress', roomCode, currentQuestionIndex, answeredCount, questionId, newChoice).catch(() => { });
     }
   };
 
@@ -323,16 +339,24 @@ export default function LobbyPage() {
     setCurrentQuestionIndex(newIndex);
     const answeredCount = Object.values(answers).filter(a => a !== null).length;
     if (connection && roomCode && connection.state === 'Connected') {
-      connection.invoke('UpdateProgress', roomCode, newIndex, answeredCount, null, null).catch(() => {});
+      connection.invoke('UpdateProgress', roomCode, newIndex, answeredCount, null, null).catch(() => { });
     }
   };
 
   // Handle Manual Match Submit
   const handleSubmitMatch = async () => {
-    if (!connection || !roomCode) return;
-    if (!confirm('Sınavı bitirmek istediğinize emin misiniz?')) return;
+    if (!connection || !roomCode || submitting) return;
+
+    const confirmed = confirm(
+      'Sınavı bitirmek istediğinize emin misiniz?\n\n' +
+      'Bitirdikten sonra cevaplarınızı değiştiremezsiniz.'
+    );
+
+    if (!confirmed) return;
 
     setSubmitting(true);
+    setViewMode('waiting');
+
     try {
       const payload = Object.entries(answers).map(([qId, choice]) => ({
         questionId: qId,
@@ -340,10 +364,11 @@ export default function LobbyPage() {
       }));
 
       await connection.invoke('SubmitMatch', roomCode, payload);
-      setViewMode('results');
     } catch (e: any) {
-      alert(e.message || 'Sınav gönderilirken bir hata oluştu.');
       setSubmitting(false);
+      setViewMode('match');
+
+      alert(e.message || 'Sınav gönderilirken bir hata oluştu.');
     }
   };
 
@@ -414,6 +439,9 @@ export default function LobbyPage() {
   const currentQuestion = questions[currentQuestionIndex];
   const myAnsweredCount = Object.values(answers).filter(a => a !== null).length;
   const remainingSeconds = Math.max(0, matchDurationSeconds - elapsedSeconds);
+  const finishedPlayers = room.users.filter(player => player.isFinished);
+  const finishedPlayerCount = finishedPlayers.length;
+  const totalPlayerCount = room.users.length;
 
   // ==========================================
   // VIEW: 3-2-1 COUNTDOWN OVERLAY
@@ -439,7 +467,85 @@ export default function LobbyPage() {
       </div>
     );
   }
+  // ==========================================
+  // VIEW: WAITING FOR OTHER PLAYERS
+  // ==========================================
+  if (viewMode === 'waiting') {
+    return (
+      <div className="min-h-screen bg-[var(--color-bg)] flex items-center justify-center p-4">
+        <div className="w-full max-w-2xl bg-[var(--color-surface)] rounded-3xl shadow-xl p-6 md:p-8">
+          <div className="text-center mb-8">
+            <div className="text-5xl mb-4">✅</div>
 
+            <h1 className="text-2xl md:text-3xl font-bold mb-2">
+              Sınavın tamamlandı
+            </h1>
+
+            <p className="text-[var(--color-text-muted)]">
+              Diğer oyuncuların sınavı bitirmesi bekleniyor.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4 mb-8">
+            <div className="rounded-2xl bg-[var(--color-bg)] p-4 text-center">
+              <div className="text-sm text-[var(--color-text-muted)] mb-1">
+                Kalan süre
+              </div>
+
+              <div className="text-2xl font-bold text-[var(--color-primary)]">
+                {formatTimer(remainingSeconds)}
+              </div>
+            </div>
+
+            <div className="rounded-2xl bg-[var(--color-bg)] p-4 text-center">
+              <div className="text-sm text-[var(--color-text-muted)] mb-1">
+                Tamamlayanlar
+              </div>
+
+              <div className="text-2xl font-bold">
+                {finishedPlayerCount}/{totalPlayerCount}
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            {room.users.map(player => (
+              <div
+                key={player.userId}
+                className="flex items-center justify-between rounded-xl border border-white/10 p-4"
+              >
+                <div>
+                  <div className="font-semibold">
+                    {player.username}
+                    {player.userId === user?.id ? ' (Sen)' : ''}
+                  </div>
+
+                  <div className="text-sm text-[var(--color-text-muted)]">
+                    Seviye {player.level}
+                  </div>
+                </div>
+
+                {player.isFinished ? (
+                  <span className="rounded-full bg-green-500/15 text-green-500 px-3 py-1 text-sm font-semibold">
+                    Tamamladı
+                  </span>
+                ) : (
+                  <span className="rounded-full bg-yellow-500/15 text-yellow-500 px-3 py-1 text-sm font-semibold animate-pulse">
+                    Devam ediyor
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-8 flex items-center justify-center gap-3 text-sm text-[var(--color-text-muted)]">
+            <div className="w-4 h-4 rounded-full border-2 border-[var(--color-primary)] border-t-transparent animate-spin" />
+            Maç tamamlandığında sonuçlar otomatik açılacak.
+          </div>
+        </div>
+      </div>
+    );
+  }
   // ==========================================
   // VIEW: FAZ 2.4 3D-STYLE PODIUM & REWARDS
   // ==========================================
@@ -447,24 +553,23 @@ export default function LobbyPage() {
     const sortedLeaderboard = leaderboard.length > 0
       ? leaderboard
       : room.users.map(u => ({
-          userId: u.userId,
-          username: u.username,
-          level: u.level || 1,
-          rank: u.rank || 1,
-          netScore: u.netScore || 0,
-          durationMs: u.durationMs || 0,
-          correctCount: u.correctCount || 0,
-          wrongCount: u.wrongCount || 0,
-          blankCount: u.blankCount || 0,
-          xpGained: u.xpGained || 0,
-          coinsGained: u.coinsGained || 0,
-          isFinished: u.isFinished || false
-        })).sort((a, b) => b.netScore - a.netScore || a.durationMs - b.durationMs);
+        userId: u.userId,
+        username: u.username,
+        level: u.level || 1,
+        rank: u.rank || 1,
+        netScore: u.netScore || 0,
+        durationMs: u.durationMs || 0,
+        correctCount: u.correctCount || 0,
+        wrongCount: u.wrongCount || 0,
+        blankCount: u.blankCount || 0,
+        xpGained: u.xpGained || 0,
+        coinsGained: u.coinsGained || 0,
+        isFinished: u.isFinished || false
+      })).sort((a, b) => b.netScore - a.netScore || a.durationMs - b.durationMs);
 
     const firstPlace = sortedLeaderboard[0];
     const secondPlace = sortedLeaderboard[1];
     const thirdPlace = sortedLeaderboard[2];
-    const otherPlayers = sortedLeaderboard.slice(3);
 
     return (
       <div className="min-h-screen flex flex-col bg-[var(--color-bg)]">
@@ -591,11 +696,10 @@ export default function LobbyPage() {
               return (
                 <div
                   key={player.userId}
-                  className={`bg-[var(--color-surface)] rounded-2xl p-5 border-2 flex items-center justify-between transition-all ${
-                    isMe
-                      ? 'border-[var(--color-primary)] shadow-lg shadow-[var(--color-primary)]/10'
-                      : 'border-[var(--color-surface-light)]'
-                  }`}
+                  className={`bg-[var(--color-surface)] rounded-2xl p-5 border-2 flex items-center justify-between transition-all ${isMe
+                    ? 'border-[var(--color-primary)] shadow-lg shadow-[var(--color-primary)]/10'
+                    : 'border-[var(--color-surface-light)]'
+                    }`}
                 >
                   <div className="flex items-center gap-4">
                     <span className="text-2xl font-bold font-mono w-10 text-center">{medal}</span>
@@ -715,11 +819,10 @@ export default function LobbyPage() {
                     {/* Progress Bar Track */}
                     <div className="w-full bg-[var(--color-surface-light)] rounded-full h-2.5 overflow-hidden">
                       <div
-                        className={`h-2.5 rounded-full transition-all duration-500 ease-out ${
-                          isMe
-                            ? 'bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-accent)]'
-                            : 'bg-gradient-to-r from-emerald-500 to-teal-400'
-                        }`}
+                        className={`h-2.5 rounded-full transition-all duration-500 ease-out ${isMe
+                          ? 'bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-accent)]'
+                          : 'bg-gradient-to-r from-emerald-500 to-teal-400'
+                          }`}
                         style={{ width: `${percentage}%` }}
                       />
                     </div>
@@ -760,17 +863,15 @@ export default function LobbyPage() {
                     <button
                       key={key}
                       onClick={() => handleSelectChoice(currentQuestion.id, key)}
-                      className={`w-full text-left px-5 py-4 rounded-2xl border-2 transition-all flex items-center font-medium cursor-pointer ${
-                        isSelected
-                          ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/20 text-white shadow-lg shadow-[var(--color-primary)]/10'
-                          : 'border-[var(--color-surface-light)] bg-[var(--color-surface-light)] hover:border-[var(--color-primary)]/40 text-[var(--color-text)]'
-                      }`}
+                      className={`w-full text-left px-5 py-4 rounded-2xl border-2 transition-all flex items-center font-medium cursor-pointer ${isSelected
+                        ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/20 text-white shadow-lg shadow-[var(--color-primary)]/10'
+                        : 'border-[var(--color-surface-light)] bg-[var(--color-surface-light)] hover:border-[var(--color-primary)]/40 text-[var(--color-text)]'
+                        }`}
                     >
-                      <span className={`inline-flex items-center justify-center w-8 h-8 rounded-xl mr-4 text-sm font-bold transition ${
-                        isSelected
-                          ? 'bg-[var(--color-primary)] text-white shadow'
-                          : 'bg-[var(--color-bg)] text-[var(--color-text-muted)]'
-                      }`}>
+                      <span className={`inline-flex items-center justify-center w-8 h-8 rounded-xl mr-4 text-sm font-bold transition ${isSelected
+                        ? 'bg-[var(--color-primary)] text-white shadow'
+                        : 'bg-[var(--color-bg)] text-[var(--color-text-muted)]'
+                        }`}>
                         {key}
                       </span>
                       <span className="flex-1">{text}</span>
@@ -819,13 +920,12 @@ export default function LobbyPage() {
               <button
                 key={q.id}
                 onClick={() => handleNavigateQuestion(idx)}
-                className={`w-9 h-9 rounded-xl text-xs font-bold transition cursor-pointer ${
-                  idx === currentQuestionIndex
-                    ? 'bg-[var(--color-primary)] text-white shadow-lg'
-                    : answers[q.id] !== null
-                      ? 'bg-[var(--color-success)]/30 text-[var(--color-success)] border border-[var(--color-success)]/50'
-                      : 'bg-[var(--color-surface)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-light)]'
-                }`}
+                className={`w-9 h-9 rounded-xl text-xs font-bold transition cursor-pointer ${idx === currentQuestionIndex
+                  ? 'bg-[var(--color-primary)] text-white shadow-lg'
+                  : answers[q.id] !== null
+                    ? 'bg-[var(--color-success)]/30 text-[var(--color-success)] border border-[var(--color-success)]/50'
+                    : 'bg-[var(--color-surface)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-light)]'
+                  }`}
               >
                 {idx + 1}
               </button>
@@ -940,11 +1040,10 @@ export default function LobbyPage() {
             return (
               <div
                 key={participant.userId}
-                className={`bg-[var(--color-surface)] rounded-2xl p-5 border-2 transition-all duration-300 flex items-center justify-between ${
-                  isMe
-                    ? 'border-[var(--color-primary)] shadow-lg shadow-[var(--color-primary)]/10'
-                    : 'border-[var(--color-surface-light)]'
-                }`}
+                className={`bg-[var(--color-surface)] rounded-2xl p-5 border-2 transition-all duration-300 flex items-center justify-between ${isMe
+                  ? 'border-[var(--color-primary)] shadow-lg shadow-[var(--color-primary)]/10'
+                  : 'border-[var(--color-surface-light)]'
+                  }`}
               >
                 <div className="flex items-center gap-3">
                   <div className="w-12 h-12 rounded-xl bg-[var(--color-surface-light)] flex items-center justify-center text-xl font-bold text-[var(--color-primary)] border border-white/5 relative">
@@ -1015,11 +1114,10 @@ export default function LobbyPage() {
             ) : (
               <button
                 onClick={handleToggleReady}
-                className={`w-full sm:w-auto px-8 py-3.5 font-bold rounded-xl shadow-lg transition flex items-center justify-center gap-2 cursor-pointer ${
-                  isReady
-                    ? 'bg-amber-500/20 text-amber-400 border border-amber-500/50 hover:bg-amber-500/30'
-                    : 'bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-dark)] shadow-[var(--color-primary)]/20'
-                }`}
+                className={`w-full sm:w-auto px-8 py-3.5 font-bold rounded-xl shadow-lg transition flex items-center justify-center gap-2 cursor-pointer ${isReady
+                  ? 'bg-amber-500/20 text-amber-400 border border-amber-500/50 hover:bg-amber-500/30'
+                  : 'bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-dark)] shadow-[var(--color-primary)]/20'
+                  }`}
               >
                 {isReady ? '⚪ Hazır Değilim' : '🟢 Hazırım!'}
               </button>

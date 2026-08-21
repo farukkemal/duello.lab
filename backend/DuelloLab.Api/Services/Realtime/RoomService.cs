@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using DuelloLab.Api.Data;
 using DuelloLab.Api.DTOs.Exam;
@@ -13,6 +14,8 @@ public class RoomService : IRoomService
 {
     private readonly AppDbContext _db;
     private readonly IRoomStateService _roomState;
+    private static readonly ConcurrentDictionary<string, SemaphoreSlim>
+    MatchFinishLocks = new();
     private const int RoomCreationCost = 50;
     private static readonly char[] CodeCharacters = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789".ToCharArray();
 
@@ -239,6 +242,29 @@ public class RoomService : IRoomService
 
         if (!room.Users.TryGetValue(userId.ToString(), out var roomUser))
             throw new InvalidOperationException("Kullanıcı bu odada bulunamadı.");
+        if (room.Status != RoomStatus.InProgress)
+        {
+            throw new InvalidOperationException(
+                "Sadece devam eden bir maç için cevap gönderilebilir.");
+        }
+
+        if (!room.StartTime.HasValue)
+        {
+            throw new InvalidOperationException(
+                "Maçın başlangıç zamanı bulunamadı.");
+        }
+
+        if (DateTime.UtcNow < room.StartTime.Value)
+        {
+            throw new InvalidOperationException(
+                "Maç henüz başlamadı.");
+        }
+
+        if (roomUser.IsFinished)
+        {
+            throw new InvalidOperationException(
+                "Sınavınızı daha önce tamamladınız. Cevaplar tekrar gönderilemez.");
+        }
 
         var submittedAt = DateTime.UtcNow;
         var startTime = room.StartTime ?? submittedAt;
@@ -331,8 +357,59 @@ public class RoomService : IRoomService
 
         return (playerResult, matchEnded);
     }
+    public async Task<MatchEndedDto> ForceTimeUpAsync(string roomCode)
+    {
+        var code = roomCode.ToUpper().Trim();
 
+        var room = await _roomState.GetRoomAsync(code)
+            ?? throw new InvalidOperationException(
+                "Oda bulunamadı veya maç daha önce tamamlandı.");
+
+        if (room.Status != RoomStatus.InProgress)
+        {
+            throw new InvalidOperationException(
+                "Sadece devam eden bir maç süre dolumu nedeniyle bitirilebilir.");
+        }
+
+        if (!room.StartTime.HasValue)
+        {
+            throw new InvalidOperationException(
+                "Maçın başlangıç zamanı bulunamadı.");
+        }
+
+        var now = DateTime.UtcNow;
+        var endTime = room.StartTime.Value.AddSeconds(room.DurationSeconds);
+
+        if (now < endTime)
+        {
+            var remainingSeconds = Math.Ceiling((endTime - now).TotalSeconds);
+
+            throw new InvalidOperationException(
+                $"Maç süresi henüz dolmadı. Kalan süre: {remainingSeconds} saniye.");
+        }
+
+        return await FinishMatchAsync(code);
+    }
     public async Task<MatchEndedDto> FinishMatchAsync(string roomCode)
+    {
+        var code = roomCode.ToUpper().Trim();
+
+        var finishLock = MatchFinishLocks.GetOrAdd(
+            code,
+            _ => new SemaphoreSlim(1, 1));
+
+        await finishLock.WaitAsync();
+
+        try
+        {
+            return await FinishMatchCoreAsync(code);
+        }
+        finally
+        {
+            finishLock.Release();
+        }
+    }
+    private async Task<MatchEndedDto> FinishMatchCoreAsync(string roomCode)
     {
         var room = await _roomState.GetRoomAsync(roomCode.ToUpper())
             ?? throw new InvalidOperationException("Oda bulunamadı.");
