@@ -37,24 +37,40 @@ public class RoomService : IRoomService
         user.CoinBalance -= RoomCreationCost;
         await _db.SaveChangesAsync();
 
-        // 2. Select solo pool questions
+
+        // 2. Select battleground pool questions
+
         var now = DateTime.UtcNow;
+
         var questionQuery = _db.Questions
-            .Where(q => q.PoolType == PoolType.Solo && (q.AvailableAfter == null || q.AvailableAfter < now));
+            .Where(q =>
+                q.PoolType == PoolType.Battleground &&
+                (q.AvailableAfter == null || q.AvailableAfter < now));
 
         if (!string.IsNullOrWhiteSpace(dto.Category))
         {
-            var categoryQuestions = questionQuery.Where(q => q.Exam.Category.ToLower() == dto.Category.ToLower());
+            var categoryQuestions = questionQuery
+                .Where(q =>
+                    q.Exam.Category.ToLower() == dto.Category.ToLower());
+
             if (await categoryQuestions.AnyAsync())
             {
                 questionQuery = categoryQuestions;
             }
         }
 
-        var availableQuestions = await questionQuery.Select(q => q.Id).ToListAsync();
+        var availableQuestions = await questionQuery
+            .Select(q => q.Id)
+            .ToListAsync();
 
-        var count = Math.Min(dto.QuestionCount > 0 ? dto.QuestionCount : 5, Math.Max(availableQuestions.Count, 1));
-        var selectedQuestionIds = availableQuestions.OrderBy(_ => Guid.NewGuid()).Take(count).ToList();
+        var count = Math.Min(
+            dto.QuestionCount > 0 ? dto.QuestionCount : 5,
+            availableQuestions.Count);
+
+        var selectedQuestionIds = availableQuestions
+            .OrderBy(_ => Guid.NewGuid())
+            .Take(count)
+            .ToList();
 
         // 3. Generate unique 4-character room code
         string roomCode;
