@@ -52,7 +52,11 @@ export default function LobbyPage() {
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const timerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const autoSubmittedRef = useRef(false);
+  const viewModeRef = useRef<ViewMode>('lobby');
 
+  useEffect(() => {
+    viewModeRef.current = viewMode;
+  }, [viewMode]);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -124,15 +128,25 @@ export default function LobbyPage() {
       setRoom({ ...data.room, users: usersList });
     };
 
-    const handleUserLeft = (data: { userId: string; username: string; room?: any }) => {
+    const handleUserLeft = (data: {
+      userId: string;
+      username: string;
+      room?: any;
+    }) => {
       console.log('🚪 [Lobby] User left:', data);
       showToast(`👋 ${data.username} odadan ayrıldı.`);
+
       if (data.room) {
         const usersList: RoomUserInfo[] = Array.isArray(data.room.users)
           ? data.room.users
           : Object.values(data.room.users || {});
+
         setRoom({ ...data.room, users: usersList });
-      } else {
+        return;
+      }
+
+      // Oda kapanmış olsa bile sonuç ekranını açık tut.
+      if (viewModeRef.current !== 'results') {
         navigate('/dashboard');
       }
     };
@@ -371,6 +385,21 @@ export default function LobbyPage() {
       alert(e.message || 'Sınav gönderilirken bir hata oluştu.');
     }
   };
+  const handleExitResults = async () => {
+    if (
+      connection &&
+      roomCode &&
+      connection.state === 'Connected'
+    ) {
+      try {
+        await connection.invoke('LeaveLobby', roomCode);
+      } catch (e) {
+        console.warn('Result exit LeaveLobby error:', e);
+      }
+    }
+
+    navigate('/dashboard');
+  };
 
   const handleLeaveRoom = async () => {
     if (!confirm('Lobiden ayrılmak istediğinize emin misiniz?')) return;
@@ -422,10 +451,11 @@ export default function LobbyPage() {
           <h2 className="text-xl font-bold mb-2">Lobiye Ulaşılamadı</h2>
           <p className="text-[var(--color-text-muted)] mb-6 text-sm">{error || 'Oda bulunamadı veya süresi doldu.'}</p>
           <button
-            onClick={() => navigate('/dashboard')}
-            className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-dark)] text-white py-3 rounded-xl font-semibold transition cursor-pointer"
-          >
-            Dashboard'a Dön
+            onClick={handleExitResults}
+            title="Sonuçlardan çık"
+            aria-label="Sonuçlardan çık ve Dashboard'a dön"
+            className="w-10 h-10 flex items-center justify-center bg-[var(--color-primary)] hover:bg-[var(--color-primary-dark)] text-white text-xl font-bold rounded-xl transition cursor-pointer"
+          > ✕
           </button>
         </div>
       </div>

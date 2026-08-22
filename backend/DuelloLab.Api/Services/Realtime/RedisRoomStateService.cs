@@ -288,33 +288,40 @@ public class RedisRoomStateService : IRoomStateService
         return await CreateRoomAsync(room);
     }
 
-    public async Task<(bool success, RoomState? updatedRoom)> LeaveRoomAsync(string roomCode, string userId)
+    public async Task<(bool success, RoomState? updatedRoom)> LeaveRoomAsync(
+    string roomCode,
+    string userId)
     {
-        var room = await GetRoomAsync(roomCode);
-        if (room == null) return (false, null);
+        var code = roomCode.ToUpper().Trim();
+
+        var room = await GetRoomAsync(code);
+        if (room == null)
+            return (false, null);
+
+        var hostLeft = room.HostUserId == userId;
 
         room.Users.Remove(userId);
         await RemoveUserRoomAsync(userId);
 
-        if (room.Users.Count == 0)
+        // Host ayrılırsa veya odada kimse kalmazsa oda tamamen kapanır.
+        if (hostLeft || room.Users.Count == 0)
         {
-            await DeleteRoomAsync(roomCode);
+            // Kalan kullanıcıların oda eşleşmelerini de temizle.
+            foreach (var remainingUserId in room.Users.Keys)
+            {
+                await RemoveUserRoomAsync(remainingUserId);
+            }
+
+            await DeleteRoomAsync(code);
             return (true, null);
         }
 
-        // If host left, pass host to next user
-        if (room.HostUserId == userId && room.Users.Count > 0)
-        {
-            var nextHost = room.Users.Values.First();
-            nextHost.IsHost = true;
-            nextHost.IsReady = true;
-            room.HostUserId = nextHost.UserId;
-            room.HostUsername = nextHost.Username;
-        }
-
+        // Host dışındaki bir oyuncu ayrıldı; oda yaşamaya devam eder.
         await CreateRoomAsync(room);
         return (true, room);
     }
+
+
 
     public async Task<(bool success, RoomState? updatedRoom)> SetUserReadyAsync(string roomCode, string userId, bool isReady)
     {

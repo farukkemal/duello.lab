@@ -531,8 +531,10 @@ public class RoomService : IRoomService
         await _db.SaveChangesAsync();
 
         // 5. Clean up Room from Redis / Memory
+        // 5. Keep the finished room until the host leaves
+        // or all participants leave.
         room.Status = RoomStatus.Finished;
-        await _roomState.DeleteRoomAsync(roomCode);
+        await _roomState.CreateRoomAsync(room);
 
         // 6. Return full match summary
         return new MatchEndedDto
