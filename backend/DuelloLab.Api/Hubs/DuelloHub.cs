@@ -298,8 +298,13 @@ public class DuelloHub : Hub
             _logger.LogInformation("🏁 [SignalR] User {UserId} finished match in {RoomCode}. NetScore={NetScore}, Duration={DurationMs}ms, Rank=#{Rank}",
                 userId, code, playerResult.NetScore, playerResult.DurationMs, playerResult.Rank);
 
-            // Notify all players that this user finished with their score
-            await Clients.Group(code).SendAsync("PlayerFinished", playerResult);
+            // // Notify players that this user finished without revealing the result
+            await Clients.Group(code).SendAsync("PlayerFinished", new
+            {
+                playerResult.UserId,
+                playerResult.Username,
+                IsFinished = true
+            });
 
             // If everyone is finished, broadcast the full match leaderboard with podium details
             if (matchEnded != null)
@@ -323,12 +328,17 @@ public class DuelloHub : Hub
         try
         {
             _logger.LogInformation("⏰ [SignalR] Match time expired for Lobby {RoomCode}. Calculating podium & rewards...", code);
-            var matchEnded = await _roomService.FinishMatchAsync(code);
+            var matchEnded = await _roomService.ForceTimeUpAsync(code);
             await Clients.Group(code).SendAsync("MatchEnded", matchEnded);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "ForceTimeUp warning for room {RoomCode}", code);
+            _logger.LogWarning(
+                ex,
+                "ForceTimeUp rejected for room {RoomCode}",
+                code);
+
+            throw new HubException(ex.Message);
         }
     }
 

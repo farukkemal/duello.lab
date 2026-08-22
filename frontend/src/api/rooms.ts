@@ -95,6 +95,26 @@ export interface MatchEndedData {
   endedAt?: string;
   leaderboard: MatchPlayerResult[];
 }
+export interface PlayerFinishedData {
+  userId: string;
+  username: string;
+  isFinished: boolean;
+}
+
+export interface MatchPlayerResult {
+  userId: string;
+  username: string;
+  level?: number;
+  rank: number;
+  netScore: number;
+  durationMs: number;
+  correctCount: number;
+  wrongCount: number;
+  blankCount: number;
+  xpGained: number;
+  coinsGained: number;
+  isFinished: boolean;
+}
 
 export const createRoom = (payload: CreateRoomPayload) =>
   api.post<RoomState>('/rooms/create', payload);
