@@ -1,5 +1,6 @@
 using System.Text;
 using DuelloLab.Api.Data;
+using DuelloLab.Api.Data.Seed;
 using DuelloLab.Api.Hubs;
 using DuelloLab.Api.Middleware;
 using DuelloLab.Api.Services;
@@ -129,5 +130,18 @@ app.UseAuthorization();
 
 app.MapControllers();
 app.MapHub<DuelloHub>("/hubs/duello");
+
+// Development ortamında örnek TYT sorularını veritabanına ekle.
+if (app.Environment.IsDevelopment())
+{
+    using var scope = app.Services.CreateScope();
+
+    var db = scope.ServiceProvider
+        .GetRequiredService<AppDbContext>();
+
+    await ExamSeeder.SeedAsync(
+        db,
+        app.Environment.ContentRootPath);
+}
 
 app.Run();
