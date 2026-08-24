@@ -112,12 +112,12 @@ public class BotService : IBotService
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-        // Soru havuzundan soruları seç
+        // Soru havuzundan soruları seç — önce Battleground, yoksa tüm havuz
         var now = DateTime.UtcNow;
         var questionQuery = db.Questions
-            .Where(q => q.PoolType == DuelloLab.Api.Enums.PoolType.Battleground
-                     && (q.AvailableAfter == null || q.AvailableAfter < now));
+            .Where(q => (q.AvailableAfter == null || q.AvailableAfter < now));
 
+        // Kategori filtresi
         if (!string.IsNullOrWhiteSpace(request.Category))
         {
             var catQ = questionQuery.Where(q => q.Exam.Category.ToLower() == request.Category.ToLower());
@@ -125,8 +125,12 @@ public class BotService : IBotService
         }
 
         var availableIds = await questionQuery.Select(q => q.Id).ToListAsync();
+        if (availableIds.Count == 0)
+            throw new InvalidOperationException("Seçilen kategoride soru bulunamadı. Lütfen farklı bir kategori deneyin.");
+
         var count = Math.Min(request.QuestionCount > 0 ? request.QuestionCount : 5, availableIds.Count);
         var selectedIds = availableIds.OrderBy(_ => Guid.NewGuid()).Take(count).ToList();
+
 
         // Benzersiz oda kodu üret
         string roomCode;

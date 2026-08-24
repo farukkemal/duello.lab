@@ -10,7 +10,7 @@ const BOT_PROFILES = [
     key: 'berkay',
     emoji: '🐢',
     name: 'Berkay',
-    rank: 'YKS 1.000.000\'uncu',
+    rank: 'YKS 1.000.000\'uncusu',
     description: 'Temel konuları çalışıyor, ama hâlâ çok boş bırakıyor.',
     correct: '%40 Doğru',
     speed: 'Yavaş',
@@ -67,6 +67,7 @@ const BOT_PROFILES = [
     badge: 'bg-violet-500/20 text-violet-300 border-violet-500/40',
   },
 ] as const;
+
 
 type BotKey = typeof BOT_PROFILES[number]['key'];
 
