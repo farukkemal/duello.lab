@@ -25,6 +25,13 @@ public class RoomService : IRoomService
         _roomState = roomState;
     }
 
+    public static int CalculateMatchDuration(int questionCount)
+    {
+        if (questionCount == 3) return 90;   // 1.5 dk = 90 sn
+        if (questionCount == 5) return 225;  // 3 dk 45 sn = 225 sn
+        return Math.Max(60, questionCount * 60); // her soruya 1 dk
+    }
+
     public async Task<RoomResponseDto> CreateRoomAsync(Guid userId, CreateRoomDto dto)
     {
         var user = await _db.Users.FindAsync(userId)
@@ -105,9 +112,10 @@ public class RoomService : IRoomService
             QuestionIds = selectedQuestionIds,
             Status = RoomStatus.Waiting,
             MaxPlayers = 100,
-            DurationSeconds = Math.Max(60, selectedQuestionIds.Count * 45), // 45 seconds per question
+            DurationSeconds = CalculateMatchDuration(selectedQuestionIds.Count),
             CreatedAt = DateTime.UtcNow
         };
+
 
         room.Users[user.Id.ToString()] = hostUser;
 
@@ -182,7 +190,8 @@ public class RoomService : IRoomService
         room.Status = RoomStatus.InProgress;
         // Central 3-second synchronized countdown
         room.StartTime = DateTime.UtcNow.AddSeconds(3);
-        room.DurationSeconds = Math.Max(60, questions.Count * 45);
+        room.DurationSeconds = CalculateMatchDuration(questions.Count);
+
 
         foreach (var u in room.Users.Values)
         {
@@ -360,9 +369,10 @@ public class RoomService : IRoomService
             WrongCount = roomUser.WrongCount,
             BlankCount = roomUser.BlankCount,
             XpGained = Math.Max(0, (int)(netScore * 10)),
-            CoinsGained = 5,
+            CoinsGained = (room.Users.Values.Any(u => u.IsBot) || room.RoomCode.EndsWith("B")) ? 0 : 5,
             IsFinished = true
         };
+
 
         MatchEndedDto? matchEnded = null;
         bool allFinished = room.Users.Values.All(u => u.IsFinished);
@@ -483,6 +493,7 @@ public class RoomService : IRoomService
 
         // 3. Assign Ranks & Distribute Rewards
         var userResultsToInsert = new List<UserResult>();
+        bool isBotRoom = room.Users.Values.Any(u => u.IsBot) || room.RoomCode.EndsWith("B");
 
         for (int i = 0; i < orderedUsers.Count; i++)
         {
@@ -491,26 +502,47 @@ public class RoomService : IRoomService
 
             int baseXP = Math.Max(0, (int)(u.NetScore * 10));
             int bonusXP = 0;
-            int coins = 5; // Base participation reward
+            int coins = isBotRoom ? 0 : 5; // Bot maçında Coin ödülü verilmez
 
-            if (u.Rank == 1)
+            if (!isBotRoom)
             {
-                bonusXP = 100;
-                coins = 40;
+                if (u.Rank == 1)
+                {
+                    bonusXP = 100;
+                    coins = 40;
+                }
+                else if (u.Rank == 2)
+                {
+                    bonusXP = 50;
+                    coins = 20;
+                }
+                else if (u.Rank == 3)
+                {
+                    bonusXP = 25;
+                    coins = 10;
+                }
             }
-            else if (u.Rank == 2)
+            else
             {
-                bonusXP = 50;
-                coins = 20;
-            }
-            else if (u.Rank == 3)
-            {
-                bonusXP = 25;
-                coins = 10;
+                // Bot maçlarında ilk 3'e girilirse XP ödülleri: 1. -> 50 XP, 2. -> 30 XP, 3. -> 10 XP
+                if (u.Rank == 1)
+                {
+                    bonusXP = 50;
+                }
+                else if (u.Rank == 2)
+                {
+                    bonusXP = 30;
+                }
+                else if (u.Rank == 3)
+                {
+                    bonusXP = 10;
+                }
             }
 
-            u.XpGained = baseXP + bonusXP;
-            u.CoinsGained = coins;
+            u.XpGained = u.IsBot ? 0 : (baseXP + bonusXP);
+            u.CoinsGained = u.IsBot ? 0 : coins;
+
+
 
             // Persistence: UserResult record
             if (Guid.TryParse(u.UserId, out var uid))

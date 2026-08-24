@@ -26,6 +26,12 @@ import MobileTopHUD from '../components/MobileTopHUD';
 import EmotePicker from '../components/EmotePicker';
 import QuestionReviewModal from '../components/QuestionReviewModal';
 
+export const getMatchDuration = (questionCount: number) => {
+  if (questionCount === 3) return 90;   // 1.5 dk = 90 sn
+  if (questionCount === 5) return 225;  // 3 dk 45 sn = 225 sn
+  return Math.max(60, questionCount * 60); // her soruya 1 dk
+};
+
 type ViewMode = 'lobby' | 'countdown' | 'match' | 'results';
 
 export default function LobbyPage() {
@@ -47,7 +53,7 @@ export default function LobbyPage() {
   const [answers, setAnswers] = useState<Record<string, string | null>>({});
   const [playerProgressMap, setPlayerProgressMap] = useState<Record<string, PlayerProgressData>>({});
   const [matchStartTime, setMatchStartTime] = useState<Date | null>(null);
-  const [matchDurationSeconds, setMatchDurationSeconds] = useState(300);
+  const [matchDurationSeconds, setMatchDurationSeconds] = useState(225);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [submitting, setSubmitting] = useState(false);
 
@@ -85,10 +91,17 @@ export default function LobbyPage() {
     getRoom(roomCode)
       .then(({ data }) => {
         setRoom(data);
-        if (data.durationSeconds) setMatchDurationSeconds(data.durationSeconds);
+        const qCount = data.questionCount || data.questions?.length || 5;
+        setMatchDurationSeconds(data.durationSeconds || getMatchDuration(qCount));
         if (data.status === 'InProgress' && data.questions && data.questions.length > 0) {
           setQuestions(data.questions);
-          if (data.startTime) setMatchStartTime(new Date(data.startTime));
+          if (data.startTime) {
+            const startStr = data.startTime.endsWith('Z') ? data.startTime : data.startTime + 'Z';
+            const start = new Date(startStr);
+            setMatchStartTime(start);
+            const diff = Math.max(0, Math.floor((Date.now() - start.getTime()) / 1000));
+            setElapsedSeconds(diff);
+          }
           setViewMode('match');
         }
         setLoading(false);
@@ -119,11 +132,14 @@ export default function LobbyPage() {
         if (state.questions && state.questions.length > 0) {
           setQuestions(state.questions);
         }
+        const qCount = state.questionCount || state.questions?.length || 5;
+        setMatchDurationSeconds(state.durationSeconds || getMatchDuration(qCount));
         if (state.startTime) {
-          setMatchStartTime(new Date(state.startTime));
-        }
-        if (state.durationSeconds) {
-          setMatchDurationSeconds(state.durationSeconds);
+          const startStr = state.startTime.endsWith('Z') ? state.startTime : state.startTime + 'Z';
+          const start = new Date(startStr);
+          setMatchStartTime(start);
+          const diff = Math.max(0, Math.floor((Date.now() - start.getTime()) / 1000));
+          setElapsedSeconds(diff);
         }
         setViewMode('match');
       }
@@ -158,11 +174,14 @@ export default function LobbyPage() {
 
     const handleMatchStarting = (data: MatchStartingData) => {
       setQuestions(data.questions);
-      if (data.durationSeconds) setMatchDurationSeconds(data.durationSeconds);
+      const qCount = data.totalQuestions || data.questions?.length || 5;
+      setMatchDurationSeconds(data.durationSeconds || getMatchDuration(qCount));
       const initialAnswers: Record<string, string | null> = {};
       data.questions.forEach(q => { initialAnswers[q.id] = null; });
       setAnswers(initialAnswers);
-      setMatchStartTime(new Date(data.startTime));
+      const startStr = data.startTime.endsWith('Z') ? data.startTime : data.startTime + 'Z';
+      setMatchStartTime(new Date(startStr));
+      setElapsedSeconds(0);
       autoSubmittedRef.current = false;
       setIsEliminated(false);
 
@@ -189,6 +208,7 @@ export default function LobbyPage() {
         if (cd <= 0) {
           clearInterval(cdInterval);
           playCountdownGo();
+          setElapsedSeconds(0);
           setViewMode('match');
         } else {
           playCountdownTick();
@@ -196,6 +216,7 @@ export default function LobbyPage() {
         }
       }, 1000);
     };
+
 
     const handlePlayerProgress = (data: PlayerProgressData) => {
       setPlayerProgressMap(prev => ({
@@ -271,16 +292,16 @@ export default function LobbyPage() {
 
   // Timer Interval
   useEffect(() => {
-    if (viewMode === 'match' && matchStartTime) {
+    if (viewMode === 'match') {
       timerIntervalRef.current = setInterval(() => {
-        const now = new Date();
-        const diffSec = Math.max(0, Math.floor((now.getTime() - matchStartTime.getTime()) / 1000));
-        setElapsedSeconds(diffSec);
-
-        if (matchDurationSeconds > 0 && diffSec >= matchDurationSeconds && !autoSubmittedRef.current) {
-          autoSubmittedRef.current = true;
-          handleAutoSubmitOnTimeUp();
-        }
+        setElapsedSeconds(prev => {
+          const next = prev + 1;
+          if (matchDurationSeconds > 0 && next >= matchDurationSeconds && !autoSubmittedRef.current) {
+            autoSubmittedRef.current = true;
+            handleAutoSubmitOnTimeUp();
+          }
+          return next;
+        });
       }, 1000);
     } else {
       if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
@@ -289,7 +310,8 @@ export default function LobbyPage() {
     return () => {
       if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
     };
-  }, [viewMode, matchStartTime, matchDurationSeconds]);
+  }, [viewMode, matchDurationSeconds]);
+
 
   const handleAutoSubmitOnTimeUp = async () => {
     if (!connection || !roomCode) return;
@@ -497,7 +519,7 @@ export default function LobbyPage() {
                     <div className="text-[9px] font-mono text-cyan-400 font-bold mb-1">{leaderboard[1].netScore.toFixed(1)} N</div>
                     <div className="w-full bg-slate-600/40 border-t-2 border-slate-400 rounded-t-xl h-24 flex flex-col items-center justify-center">
                       <span className="font-black text-slate-200 text-lg">2</span>
-                      <span className="text-[8px] text-slate-300 font-bold">+{leaderboard[1].coinsGained} 💰</span>
+                      <span className="text-[8px] text-slate-300 font-bold">{leaderboard[1].coinsGained > 0 ? `+${leaderboard[1].coinsGained} 💰` : '0 💰'}</span>
                     </div>
                   </div>
                 )}
@@ -509,7 +531,7 @@ export default function LobbyPage() {
                     <div className="text-[10px] font-mono text-emerald-400 font-black mb-1">{leaderboard[0].netScore.toFixed(1)} N</div>
                     <div className="w-full bg-amber-500/30 border-t-2 border-amber-400 rounded-t-xl h-36 flex flex-col items-center justify-center">
                       <span className="font-black text-amber-300 text-2xl">1</span>
-                      <span className="text-[9px] text-amber-200 font-black">+{leaderboard[0].coinsGained} 💰</span>
+                      <span className="text-[9px] text-amber-200 font-black">{leaderboard[0].coinsGained > 0 ? `+${leaderboard[0].coinsGained} 💰` : '0 💰'}</span>
                     </div>
                   </div>
                 )}
@@ -521,7 +543,7 @@ export default function LobbyPage() {
                     <div className="text-[9px] font-mono text-cyan-400 font-bold mb-1">{leaderboard[2].netScore.toFixed(1)} N</div>
                     <div className="w-full bg-amber-900/40 border-t-2 border-amber-700 rounded-t-xl h-18 flex flex-col items-center justify-center">
                       <span className="font-black text-amber-600 text-base">3</span>
-                      <span className="text-[8px] text-amber-500 font-bold">+{leaderboard[2].coinsGained} 💰</span>
+                      <span className="text-[8px] text-amber-500 font-bold">{leaderboard[2].coinsGained > 0 ? `+${leaderboard[2].coinsGained} 💰` : '0 💰'}</span>
                     </div>
                   </div>
                 )}
@@ -544,7 +566,7 @@ export default function LobbyPage() {
                   </div>
                   <div className="bg-amber-500/20 border border-amber-500/40 px-2.5 py-1.5 rounded-xl text-center">
                     <div className="text-[8px] text-slate-400 font-bold">Coin</div>
-                    <div className="text-xs font-black text-amber-300 font-mono">+{myResult.coinsGained} 💰</div>
+                    <div className="text-xs font-black text-amber-300 font-mono">{myResult.coinsGained > 0 ? `+${myResult.coinsGained} 💰` : '0 💰'}</div>
                   </div>
                 </div>
               </div>
@@ -576,11 +598,12 @@ export default function LobbyPage() {
 
                   <div className="text-right">
                     <div className="text-sm font-black text-emerald-400 font-mono">{p.netScore.toFixed(1)} Net</div>
-                    <div className="text-[9px] text-amber-300 font-bold">+{p.coinsGained} 💰</div>
+                    <div className="text-[9px] text-amber-300 font-bold">{p.coinsGained > 0 ? `+${p.coinsGained} 💰` : '0 💰'}</div>
                   </div>
                 </div>
               ))}
             </div>
+
 
             <div className="space-y-2 pt-1">
               <button
@@ -604,18 +627,18 @@ export default function LobbyPage() {
             VIEW 3: LIVE MULTIPLAYER GAMEPLAY
             ========================================== */}
         {viewMode === 'match' && (
-          <main className="flex-1 p-3.5 flex flex-col justify-between space-y-3 animate-fadeIn">
+          <main className="flex-1 p-3.5 overflow-y-auto no-scrollbar flex flex-col space-y-3 animate-fadeIn pb-8">
             
             {/* Safe Zone Alert Banner */}
             {zoneAlert && (
-              <div className="bg-rose-600 text-white text-xs font-black p-2.5 rounded-2xl text-center animate-pulse border border-rose-300 shadow-xl">
+              <div className="bg-rose-600 text-white text-xs font-black p-2.5 rounded-2xl text-center animate-pulse border border-rose-300 shadow-xl shrink-0">
                 {zoneAlert}
               </div>
             )}
 
             {/* Elimination Overlay */}
             {isEliminated && (
-              <div className="bg-rose-950/90 border-2 border-rose-500 rounded-2xl p-3 text-center space-y-1 animate-bounce">
+              <div className="bg-rose-950/90 border-2 border-rose-500 rounded-2xl p-3 text-center space-y-1 animate-bounce shrink-0">
                 <div className="text-xl">💀 ELENDİN!</div>
                 <div className="text-[11px] text-rose-200 font-bold">{eliminationReason || 'Mücadele dışı kaldın.'}</div>
                 <div className="text-[9px] text-slate-400">Diğer oyuncuları izleyebilirsin.</div>
@@ -623,7 +646,7 @@ export default function LobbyPage() {
             )}
 
             {/* Top VS Battle Progress Bar */}
-            <div className="game-card-3d p-3 space-y-2">
+            <div className="game-card-3d p-3 space-y-2 shrink-0">
               <div className="flex items-center justify-between text-[11px] font-black">
                 <span className="text-white flex items-center gap-1">
                   <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
@@ -638,7 +661,7 @@ export default function LobbyPage() {
               </div>
 
               {/* Progress Tracks */}
-              <div className="space-y-1.5 pt-1">
+              <div className="space-y-1.5 pt-1 max-h-32 overflow-y-auto no-scrollbar">
                 {room.users.map((p) => {
                   const isMe = p.userId === user?.id;
                   const prog = playerProgressMap[p.userId] || {
@@ -680,7 +703,7 @@ export default function LobbyPage() {
 
             {/* Question Text Box */}
             {currentQuestion ? (
-              <div className="game-card-3d p-4 flex-1 flex flex-col justify-between overflow-y-auto no-scrollbar space-y-3">
+              <div className="game-card-3d p-4 flex flex-col space-y-3">
                 <div>
                   <div className="inline-block px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase bg-violet-500/20 text-violet-300 border border-violet-500/30 mb-2">
                     {currentQuestion.branch}
@@ -691,7 +714,7 @@ export default function LobbyPage() {
 
                   {currentQuestion.imageUrl && (
                     <div className="mt-2 mb-2">
-                      <img src={currentQuestion.imageUrl} alt="Soru" className="max-w-full rounded-xl border border-white/10" />
+                      <img src={currentQuestion.imageUrl} alt="Soru" className="max-w-full rounded-xl border border-white/10 max-h-60 object-contain mx-auto" />
                     </div>
                   )}
                 </div>
@@ -706,16 +729,16 @@ export default function LobbyPage() {
                         key={key}
                         disabled={isEliminated}
                         onClick={() => handleSelectChoice(currentQuestion.id, key)}
-                        className={`w-full text-left p-3 rounded-2xl flex items-center font-bold text-xs cursor-pointer select-none disabled:opacity-40 ${
+                        className={`w-full text-left p-3 rounded-2xl flex items-center font-bold text-xs cursor-pointer select-none disabled:opacity-40 transition-all ${
                           isSelected ? 'btn-game-choice selected' : 'btn-game-choice text-slate-200'
                         }`}
                       >
-                        <span className={`w-7 h-7 rounded-xl flex items-center justify-center mr-3 text-xs font-black font-mono ${
+                        <span className={`w-7 h-7 rounded-xl flex items-center justify-center mr-3 text-xs font-black font-mono shrink-0 ${
                           isSelected ? 'bg-white text-purple-900 shadow' : 'bg-black/30 text-slate-400'
                         }`}>
                           {key}
                         </span>
-                        <span className="flex-1">{text}</span>
+                        <span className="flex-1 leading-snug">{text}</span>
                       </button>
                     );
                   })}
@@ -726,7 +749,7 @@ export default function LobbyPage() {
             )}
 
             {/* Bottom Controls */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 pt-1 pb-4">
               <button
                 onClick={() => handleNavigateQuestion(Math.max(0, currentQuestionIndex - 1))}
                 disabled={currentQuestionIndex === 0}

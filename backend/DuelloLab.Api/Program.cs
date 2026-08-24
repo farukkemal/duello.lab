@@ -86,7 +86,10 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("AdminOnly", policy => policy.RequireRole("Admin"));
+});
 
 // DI - Application Services
 builder.Services.AddScoped<ITokenService, TokenService>();
@@ -196,6 +199,21 @@ if (app.Environment.IsDevelopment())
     await ExamSeeder.SeedAsync(
         db,
         app.Environment.ContentRootPath);
+
+    // Ensure Role and IsBanned columns exist on Users table
+    await db.Database.ExecuteSqlRawAsync(@"
+        ALTER TABLE ""Users"" ADD COLUMN IF NOT EXISTS ""Role"" varchar(20) NOT NULL DEFAULT 'User';
+        ALTER TABLE ""Users"" ADD COLUMN IF NOT EXISTS ""IsBanned"" boolean NOT NULL DEFAULT false;
+    ");
+
+    // Seed founder accounts as Admin (add/remove usernames as needed)
+    var founders = new[] { "meteogr", "farukkemal" };
+    foreach (var username in founders)
+    {
+        await db.Database.ExecuteSqlRawAsync(
+            @"UPDATE ""Users"" SET ""Role"" = 'Admin' WHERE ""Username"" = {0}",
+            username);
+    }
 }
 
 app.Run();

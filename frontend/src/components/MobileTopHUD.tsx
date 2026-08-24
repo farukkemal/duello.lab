@@ -101,6 +101,18 @@ export default function MobileTopHUD({ onOpenProfile }: MobileTopHUDProps) {
             <span className="text-[10px] font-bold text-slate-300">Sosyal</span>
           </button>
 
+          {/* Admin Panel shortcut (only visible to Admins) */}
+          {user.role === 'Admin' && (
+            <button
+              onClick={() => navigate('/admin')}
+              className="flex items-center gap-1 bg-amber-500/20 border border-amber-500/40 hover:border-amber-400 px-2 py-1.5 rounded-2xl cursor-pointer active:scale-95 transition"
+              title="Admin Paneli"
+            >
+              <span className="text-xs">👑</span>
+              <span className="text-[10px] font-bold text-amber-400">Admin</span>
+            </button>
+          )}
+
           {/* Right: Coin Wallet with Link to Shop */}
           <div
             onClick={() => navigate('/shop')}

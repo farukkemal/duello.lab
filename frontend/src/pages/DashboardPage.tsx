@@ -351,8 +351,9 @@ export default function DashboardPage() {
                     { emoji: '🌱', name: 'Selin',  sub: '500.000\'incisi',   color: 'bg-emerald-900/60' },
                     { emoji: '⚡', name: 'Emre',   sub: '100.000\'incisi',   color: 'bg-cyan-900/60' },
                     { emoji: '🔥', name: 'Nur',    sub: '50.000\'incisi',    color: 'bg-orange-900/60' },
-                    { emoji: '💎', name: 'Esma',   sub: '100\'üncüsü',      color: 'bg-violet-900/60' },
+                    { emoji: '💎', name: 'Serra',  sub: '100\'üncüsü',      color: 'bg-violet-900/60' },
                   ].map(b => (
+
                     <div key={b.name} className={`${b.color} rounded-xl px-2 py-1 flex items-center gap-1 border border-white/10`}>
                       <span className="text-sm">{b.emoji}</span>
                       <div>

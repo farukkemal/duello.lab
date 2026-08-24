@@ -9,6 +9,7 @@ import ResultPage from './pages/ResultPage';
 import LobbyPage from './pages/LobbyPage';
 import ShopPage from './pages/ShopPage';
 import ClanPage from './pages/ClanPage';
+import AdminPage from './pages/AdminPage';
 import GlobalDuelInviteModal from './components/GlobalDuelInviteModal';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -29,6 +30,15 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
   return token ? <Navigate to="/dashboard" replace /> : <>{children}</>;
 }
 
+function AdminRoute({ children }: { children: React.ReactNode }) {
+  const { token, user, isLoading } = useAuth();
+  if (isLoading) return null;
+  if (!token) return <Navigate to="/login" replace />;
+  if (!user) return null;
+  if (user.role !== 'Admin') return <Navigate to="/dashboard" replace />;
+  return <>{children}</>;
+}
+
 function AppRoutes() {
   return (
     <Routes>
@@ -40,6 +50,7 @@ function AppRoutes() {
       <Route path="/exam/:examId" element={<PrivateRoute><ExamPage /></PrivateRoute>} />
       <Route path="/lobby/:roomCode" element={<PrivateRoute><LobbyPage /></PrivateRoute>} />
       <Route path="/results/:resultId" element={<PrivateRoute><ResultPage /></PrivateRoute>} />
+      <Route path="/admin" element={<AdminRoute><AdminPage /></AdminRoute>} />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
   );

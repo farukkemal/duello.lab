@@ -8,6 +8,8 @@ export interface UserDto {
   xp: number;
   coinBalance: number;
   createdAt: string;
+  role: string;       // "User" | "Admin"
+  isBanned: boolean;
 }
 
 export interface AuthResponse {

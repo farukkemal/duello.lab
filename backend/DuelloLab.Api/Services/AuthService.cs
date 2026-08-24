@@ -49,6 +49,9 @@ public class AuthService : IAuthService
         if (!BCrypt.Net.BCrypt.Verify(dto.Password, user.PasswordHash))
             throw new InvalidOperationException("Invalid username or password.");
 
+        if (user.IsBanned)
+            throw new InvalidOperationException("Bu hesap askıya alınmış. Detaylar için yöneticiyle iletişime geçin.");
+
         return new AuthResponseDto
         {
             Token = _tokenService.CreateToken(user),
@@ -81,6 +84,8 @@ public class AuthService : IAuthService
         Level = user.Level,
         XP = user.XP,
         CoinBalance = user.CoinBalance,
-        CreatedAt = user.CreatedAt
+        CreatedAt = user.CreatedAt,
+        Role = user.Role,
+        IsBanned = user.IsBanned
     };
 }

@@ -9,4 +9,6 @@ public class UserDto
     public int XP { get; set; }
     public int CoinBalance { get; set; }
     public DateTime CreatedAt { get; set; }
+    public string Role { get; set; } = "User";
+    public bool IsBanned { get; set; }
 }

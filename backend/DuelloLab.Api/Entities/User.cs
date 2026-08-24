@@ -10,6 +10,8 @@ public class User
     public int XP { get; set; } = 0;
     public int CoinBalance { get; set; } = 100;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public string Role { get; set; } = "User"; // "User" | "Admin"
+    public bool IsBanned { get; set; } = false;
 
     // Navigation
     public ICollection<UserResult> UserResults { get; set; } = new List<UserResult>();

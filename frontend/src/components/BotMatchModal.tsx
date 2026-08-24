@@ -11,7 +11,7 @@ const BOT_PROFILES = [
     emoji: '🐢',
     name: 'Berkay',
     rank: 'YKS 1.000.000\'uncusu',
-    description: 'Temel konuları çalışıyor, ama hâlâ çok boş bırakıyor.',
+    description: 'Temelim fena değildir.',
     correct: '%40 Doğru',
     speed: 'Yavaş',
     color: 'from-slate-600 to-slate-500',
@@ -23,7 +23,7 @@ const BOT_PROFILES = [
     emoji: '🌱',
     name: 'Selin',
     rank: 'YKS 500.000\'incisi',
-    description: 'Düzenli çalışıyor; orta zorluk sorularda takılıyor.',
+    description: 'Orta sorularda zorlanırım.',
     correct: '%55 Doğru',
     speed: 'Orta-Yavaş',
     color: 'from-emerald-700 to-teal-600',
@@ -35,7 +35,7 @@ const BOT_PROFILES = [
     emoji: '⚡',
     name: 'Emre',
     rank: 'YKS 100.000\'incisi',
-    description: 'Güçlü bir rakip — hızlı ve isabetli.',
+    description: 'İsabetli ama yavaşım.',
     correct: '%70 Doğru',
     speed: 'Orta',
     color: 'from-cyan-700 to-blue-600',
@@ -47,7 +47,7 @@ const BOT_PROFILES = [
     emoji: '🔥',
     name: 'Nur',
     rank: 'YKS 50.000\'incisi',
-    description: 'Çok az boş bırakır, hatalarda cimri.',
+    description: 'Az boş bırakırım, az yanlış yaparım.',
     correct: '%82 Doğru',
     speed: 'Hızlı',
     color: 'from-orange-700 to-rose-600',
@@ -55,11 +55,11 @@ const BOT_PROFILES = [
     badge: 'bg-orange-500/20 text-orange-300 border-orange-500/40',
   },
   {
-    key: 'esma',
+    key: 'serra',
     emoji: '💎',
-    name: 'Esma',
+    name: 'Serra',
     rank: 'YKS 100\'üncüsü',
-    description: 'Neredeyse hatasız. Seni geçmek için mükemmel olmak zorundasın!',
+    description: 'Beni geçmek için mükemmel olmak zorundasın!',
     correct: '%94 Doğru',
     speed: 'Çok Hızlı',
     color: 'from-violet-700 to-purple-600',
@@ -67,6 +67,8 @@ const BOT_PROFILES = [
     badge: 'bg-violet-500/20 text-violet-300 border-violet-500/40',
   },
 ] as const;
+
+
 
 
 type BotKey = typeof BOT_PROFILES[number]['key'];

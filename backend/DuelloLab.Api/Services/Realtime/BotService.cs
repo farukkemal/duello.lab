@@ -52,16 +52,26 @@ public static class BotDifficultyConfig
             MinDelayMs   = 8_000,
             MaxDelayMs   = 14_000
         },
+        ["serra"] = new BotPlayerConfig
+        {
+            Difficulty   = "serra",
+            Username     = "💎 Serra",
+            CorrectRate  = 0.94,
+            WrongRate    = 0.04,
+            MinDelayMs   = 4_000,
+            MaxDelayMs   = 8_000
+        },
         ["esma"] = new BotPlayerConfig
         {
-            Difficulty   = "esma",
-            Username     = "💎 Esma",
+            Difficulty   = "serra",
+            Username     = "💎 Serra",
             CorrectRate  = 0.94,
             WrongRate    = 0.04,
             MinDelayMs   = 4_000,
             MaxDelayMs   = 8_000
         }
     };
+
 
     public static BotPlayerConfig Get(string difficulty)
     {
@@ -166,9 +176,10 @@ public class BotService : IBotService
             QuestionIds    = selectedIds,
             Status         = RoomStatus.Waiting,
             MaxPlayers     = 5,
-            DurationSeconds= Math.Max(60, count * 45),
+            DurationSeconds= RoomService.CalculateMatchDuration(count),
             CreatedAt      = now
         };
+
 
         room.Users[userId.ToString()] = hostUser;
 

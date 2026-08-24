@@ -71,10 +71,11 @@ public class BattlegroundService : IBattlegroundService
             Status = RoomStatus.Waiting,
             MaxPlayers = 100,
             CreatedAt = now,
-            DurationSeconds = questions.Count * 60,
+            DurationSeconds = RoomService.CalculateMatchDuration(questions.Count),
             SafeZonePlayersRemaining = 100,
             CurrentZoneRound = 1
         };
+
 
         roomState.Users[hostUserId] = new RoomUserInfo
         {
