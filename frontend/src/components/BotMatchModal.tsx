@@ -108,10 +108,22 @@ export default function BotMatchModal({ isOpen, onClose }: Props) {
         questionCount,
         botDifficulties: selectedBots,
       });
+      console.log('Bot odası yanıtı:', data);
+      if (!data?.roomCode) {
+        setError('Sunucu geçersiz yanıt döndürdü. Konsolu kontrol et.');
+        return;
+      }
       onClose();
       navigate(`/lobby/${data.roomCode}`);
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Antrenman başlatılamadı.');
+      console.error('Bot odası hatası:', err);
+      const msg =
+        err.response?.data?.error ||
+        err.response?.data?.title ||
+        err.response?.data ||
+        err.message ||
+        'Antrenman başlatılamadı.';
+      setError(typeof msg === 'string' ? msg : JSON.stringify(msg));
     } finally {
       setLoading(false);
     }
