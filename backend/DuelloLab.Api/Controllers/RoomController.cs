@@ -12,18 +12,33 @@ namespace DuelloLab.Api.Controllers;
 public class RoomController : ControllerBase
 {
     private readonly IRoomService _roomService;
+    private readonly IBattlegroundService _battlegroundService;
 
-    public RoomController(IRoomService roomService)
+    public RoomController(IRoomService roomService, IBattlegroundService battlegroundService)
     {
         _roomService = roomService;
+        _battlegroundService = battlegroundService;
     }
 
     private Guid GetUserId() => Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier)!.Value);
+    private string GetUsername() => User.FindFirst(ClaimTypes.Name)?.Value ?? "Savaşçı";
 
     [HttpPost("create")]
     public async Task<ActionResult<RoomResponseDto>> CreateRoom([FromBody] CreateRoomDto dto)
     {
         var result = await _roomService.CreateRoomAsync(GetUserId(), dto);
+        return Ok(result);
+    }
+
+    [HttpPost("battleground")]
+    public async Task<ActionResult<RoomResponseDto>> CreateBattleground([FromBody] CreateRoomDto dto)
+    {
+        var result = await _battlegroundService.CreateBattlegroundRoomAsync(
+            GetUserId().ToString(),
+            GetUsername(),
+            dto.Title,
+            dto.Category,
+            dto.QuestionCount > 0 ? dto.QuestionCount : 9);
         return Ok(result);
     }
 

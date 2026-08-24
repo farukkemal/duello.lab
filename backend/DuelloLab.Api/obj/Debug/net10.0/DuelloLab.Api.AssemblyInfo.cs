@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("DuelloLab.Api")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+adf3ff15fa25b55c903da59f2bfb254eaa5d030e")]
 [assembly: System.Reflection.AssemblyProductAttribute("DuelloLab.Api")]
 [assembly: System.Reflection.AssemblyTitleAttribute("DuelloLab.Api")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

@@ -12,6 +12,9 @@ public class AppDbContext : DbContext
     public DbSet<Exam> Exams => Set<Exam>();
     public DbSet<Question> Questions => Set<Question>();
     public DbSet<UserResult> UserResults => Set<UserResult>();
+    public DbSet<Clan> Clans => Set<Clan>();
+    public DbSet<ClanMember> ClanMembers => Set<ClanMember>();
+    public DbSet<Friendship> Friendships => Set<Friendship>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -73,6 +76,48 @@ public class AppDbContext : DbContext
             entity.HasOne(r => r.Exam)
                 .WithMany(e => e.UserResults)
                 .HasForeignKey(r => r.ExamId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Clan configuration
+        modelBuilder.Entity<Clan>(entity =>
+        {
+            entity.HasIndex(c => c.Name).IsUnique();
+            entity.Property(c => c.Name).HasMaxLength(50).IsRequired();
+            entity.Property(c => c.Description).HasMaxLength(200);
+            entity.Property(c => c.Tag).HasMaxLength(6);
+            entity.Property(c => c.BadgeIcon).HasMaxLength(10);
+        });
+
+        // ClanMember configuration
+        modelBuilder.Entity<ClanMember>(entity =>
+        {
+            entity.HasIndex(cm => new { cm.ClanId, cm.UserId }).IsUnique();
+
+            entity.HasOne(cm => cm.Clan)
+                .WithMany(c => c.Members)
+                .HasForeignKey(cm => cm.ClanId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(cm => cm.User)
+                .WithMany()
+                .HasForeignKey(cm => cm.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Friendship configuration
+        modelBuilder.Entity<Friendship>(entity =>
+        {
+            entity.HasIndex(f => new { f.RequesterId, f.AddresseeId }).IsUnique();
+
+            entity.HasOne(f => f.Requester)
+                .WithMany()
+                .HasForeignKey(f => f.RequesterId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(f => f.Addressee)
+                .WithMany()
+                .HasForeignKey(f => f.AddresseeId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }

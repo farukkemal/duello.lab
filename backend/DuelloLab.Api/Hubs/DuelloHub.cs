@@ -13,15 +13,21 @@ public class DuelloHub : Hub
 {
     private readonly IRoomStateService _roomStateService;
     private readonly IRoomService _roomService;
+    private readonly IMatchmakingService _matchmakingService;
+    private readonly IBattlegroundService _battlegroundService;
     private readonly ILogger<DuelloHub> _logger;
 
     public DuelloHub(
         IRoomStateService roomStateService,
         IRoomService roomService,
+        IMatchmakingService matchmakingService,
+        IBattlegroundService battlegroundService,
         ILogger<DuelloHub> logger)
     {
         _roomStateService = roomStateService;
         _roomService = roomService;
+        _matchmakingService = matchmakingService;
+        _battlegroundService = battlegroundService;
         _logger = logger;
     }
 
@@ -63,6 +69,12 @@ public class DuelloHub : Hub
     {
         var userId = await _roomStateService.RemoveUserConnectionAsync(Context.ConnectionId);
 
+        // Also remove from matchmaking queue if disconnected
+        if (!string.IsNullOrEmpty(userId))
+        {
+            await _matchmakingService.DequeueAsync(userId);
+        }
+
         if (exception != null)
         {
             _logger.LogWarning("❌ [SignalR] Client Disconnected with Error: ConnectionId={ConnectionId}, UserId={UserId}, Error={Error}",
@@ -99,7 +111,6 @@ public class DuelloHub : Hub
             }
         }
 
-        // Broadcast stats update
         var stats = await _roomStateService.GetStatsAsync();
         await Clients.All.SendAsync("StatsUpdated", stats);
 
@@ -112,10 +123,187 @@ public class DuelloHub : Hub
         await Clients.Caller.SendAsync("Pong", DateTime.UtcNow);
     }
 
-    // Get current online & room stats
     public async Task<OnlineStatsDto> GetStats()
     {
         return await _roomStateService.GetStatsAsync();
+    }
+
+    // ==========================================
+    // MATCHMAKING ACTIONS (NEW GAME MODES)
+    // ==========================================
+
+    public async Task JoinMatchmakingQueue(GameMode mode, string category = "TYT")
+    {
+        var userId = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? string.Empty;
+        var username = Context.User?.FindFirst(ClaimTypes.Name)?.Value ?? "Guest";
+        int level = 1;
+
+        var player = new QueuedPlayer
+        {
+            UserId = userId,
+            Username = username,
+            Level = level,
+            ConnectionId = Context.ConnectionId,
+            Mode = mode,
+            Category = category,
+            EnqueuedAt = DateTime.UtcNow
+        };
+
+        await _matchmakingService.EnqueueAsync(player);
+        var inQueueCount = await _matchmakingService.GetQueueCountAsync(mode, category);
+
+        await Clients.Caller.SendAsync("QueueStatusUpdated", new QueueStatusDto
+        {
+            Mode = mode,
+            InQueueCount = inQueueCount,
+            ElapsedSeconds = 0
+        });
+
+        _logger.LogInformation("⚡ [Matchmaking] {Username} kuyruğa katıldı (Mod: {Mode}, Kategori: {Cat})", username, mode, category);
+    }
+
+    public async Task LeaveMatchmakingQueue()
+    {
+        var userId = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? string.Empty;
+        await _matchmakingService.DequeueAsync(userId);
+        await Clients.Caller.SendAsync("LeftQueueAck");
+        _logger.LogInformation("🚪 [Matchmaking] {UserId} kuyruktan ayrıldı", userId);
+    }
+
+    // ==========================================
+    // BATTLEGROUND & SUDDEN DEATH ACTIONS
+    // ==========================================
+
+    public async Task TriggerZonePhase(string roomCode, int currentQuestionIndex)
+    {
+        var code = roomCode.ToUpper().Trim();
+        var zoneResult = await _battlegroundService.ProcessZoneShrinkAsync(code, currentQuestionIndex);
+
+        if (zoneResult != null)
+        {
+            _logger.LogInformation("⚠️ [Battleground] Alan daraldı ({RoomCode}): {Message}", code, zoneResult.Message);
+            await Clients.Group(code).SendAsync("ZoneShrunk", zoneResult);
+        }
+    }
+
+    public async Task SubmitSuddenDeathAnswer(string roomCode, string questionId, string? selectedChoice)
+    {
+        var code = roomCode.ToUpper().Trim();
+        var userId = GetUserId();
+        var username = Context.User?.FindFirst(ClaimTypes.Name)?.Value ?? "Oyuncu";
+
+        bool isEliminated = await _battlegroundService.ProcessSuddenDeathAnswerAsync(code, userId.ToString(), questionId, selectedChoice);
+
+        if (isEliminated)
+        {
+            _logger.LogInformation("💀 [SuddenDeath] Oyuncu elendi: {Username} ({UserId})", username, userId);
+            await Clients.Group(code).SendAsync("PlayerEliminated", new PlayerEliminatedDto
+            {
+                UserId = userId.ToString(),
+                Username = username,
+                QuestionIndex = 0,
+                Reason = "Yanlış Cevap Vererek Elendi 💀"
+            });
+        }
+    }
+
+    // ==========================================
+    // SOCIAL & DUEL INVITATIONS & EMOTES
+    // ==========================================
+
+    public async Task SendDuelInvite(string targetUserId, string category = "TYT")
+    {
+        var fromUserId = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? string.Empty;
+        var fromUsername = Context.User?.FindFirst(ClaimTypes.Name)?.Value ?? "Arkadaşın";
+
+        var targetConns = await _roomStateService.GetConnectionsByUserIdAsync(targetUserId);
+        if (targetConns.Count == 0)
+        {
+            await Clients.Caller.SendAsync("DuelInviteError", "Arkadaşınız şu anda çevrimdışı.");
+            return;
+        }
+
+        var roomRes = await _roomService.CreateRoomAsync(Guid.Parse(fromUserId), new CreateRoomDto
+        {
+            Title = $"1v1 Düello: {fromUsername}",
+            Category = category,
+            QuestionCount = 3,
+            Mode = GameMode.Ranked1v1
+        });
+
+        var roomCode = roomRes.RoomCode;
+        var inviteId = Guid.NewGuid().ToString();
+
+        var inviteData = new
+        {
+            inviteId,
+            fromUserId,
+            fromUsername,
+            fromLevel = 1,
+            category,
+            roomCode,
+            requesterConnectionId = Context.ConnectionId
+        };
+
+        foreach (var connId in targetConns)
+        {
+            await Clients.Client(connId).SendAsync("DuelInviteReceived", inviteData);
+        }
+
+        _logger.LogInformation("🤝 [DuelInvite] {From} -> {Target} (Room: {RoomCode})", fromUsername, targetUserId, roomCode);
+    }
+
+    public async Task RespondDuelInvite(string inviteId, bool accept, string roomCode, string requesterConnectionId)
+    {
+        var targetUsername = Context.User?.FindFirst(ClaimTypes.Name)?.Value ?? "Arkadaşın";
+
+        if (accept)
+        {
+            if (!string.IsNullOrEmpty(requesterConnectionId))
+            {
+                await Clients.Client(requesterConnectionId).SendAsync("DuelInviteAccepted", new { roomCode, opponentUsername = targetUsername });
+            }
+            await Clients.Caller.SendAsync("DuelInviteAccepted", new { roomCode, opponentUsername = targetUsername });
+        }
+        else
+        {
+            if (!string.IsNullOrEmpty(requesterConnectionId))
+            {
+                await Clients.Client(requesterConnectionId).SendAsync("DuelInviteDeclined", new { targetUsername });
+            }
+        }
+    }
+
+    public async Task SendEmote(string roomCode, string emoteKey)
+    {
+        var code = roomCode.ToUpper().Trim();
+        var userId = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? string.Empty;
+        var username = Context.User?.FindFirst(ClaimTypes.Name)?.Value ?? "Oyuncu";
+
+        string icon = emoteKey switch
+        {
+            "fire" => "🔥",
+            "shock" => "🤯",
+            "crown" => "👑",
+            "skull" => "💀",
+            "bullseye" => "🎯",
+            "crying" => "😭",
+            "cool" => "😎",
+            "celebrate" => "🎉",
+            _ => "🔥"
+        };
+
+        var emoteData = new
+        {
+            userId,
+            username,
+            emoteKey,
+            icon,
+            timestamp = DateTime.UtcNow
+        };
+
+        _logger.LogInformation("💬 [Emote] {Username} in {RoomCode} sent {Icon}", username, code, icon);
+        await Clients.Group(code).SendAsync("EmoteReceived", emoteData);
     }
 
     // ==========================================
@@ -145,7 +333,7 @@ public class DuelloHub : Hub
                 Username = username,
                 ConnectionId = Context.ConnectionId,
                 IsHost = room.HostUserId == userId,
-                IsReady = room.HostUserId == userId,
+                IsReady = room.HostUserId == userId || room.Mode == GameMode.Ranked1v1,
                 JoinedAt = DateTime.UtcNow
             };
             await _roomStateService.JoinRoomAsync(code, roomUser);
@@ -233,7 +421,7 @@ public class DuelloHub : Hub
     }
 
     // ==========================================
-    // GAMEPLAY & LIVE PROGRESS (FAZ 2.3 & FAZ 2.4)
+    // GAMEPLAY & LIVE PROGRESS
     // ==========================================
 
     public async Task StartMatch(string roomCode)
@@ -243,9 +431,19 @@ public class DuelloHub : Hub
 
         try
         {
-            var matchStarting = await _roomService.StartMatchAsync(userId, code);
+            var room = await _roomStateService.GetRoomAsync(code);
+            MatchStartingDto matchStarting;
 
-            _logger.LogInformation("⚔️ [SignalR] Match starting in Lobby {RoomCode} by Host {UserId}. 3-2-1 Countdown initiated.", code, userId);
+            if (room?.Mode == GameMode.Battleground100)
+            {
+                matchStarting = await _battlegroundService.StartBattlegroundMatchAsync(code);
+            }
+            else
+            {
+                matchStarting = await _roomService.StartMatchAsync(userId, code);
+            }
+
+            _logger.LogInformation("⚔️ [SignalR] Match starting in Lobby {RoomCode} by Host {UserId}. Mode: {Mode}", code, userId, matchStarting.Mode);
 
             // Broadcast MatchStarting with 3-2-1 countdown timestamp to all participants
             await Clients.Group(code).SendAsync("MatchStarting", matchStarting);
@@ -277,6 +475,17 @@ public class DuelloHub : Hub
                 questionId,
                 selectedChoice);
 
+            // Check if Battleground safe zone shrink should trigger (every 3 questions)
+            var room = await _roomStateService.GetRoomAsync(code);
+            if (room?.Mode == GameMode.Battleground100 && (currentQuestionIndex + 1) % 3 == 0)
+            {
+                var zoneResult = await _battlegroundService.ProcessZoneShrinkAsync(code, currentQuestionIndex);
+                if (zoneResult != null)
+                {
+                    await Clients.Group(code).SendAsync("ZoneShrunk", zoneResult);
+                }
+            }
+
             // Broadcast real-time progress update to all participants in the match
             await Clients.Group(code).SendAsync("PlayerProgressUpdated", progress);
         }
@@ -298,7 +507,7 @@ public class DuelloHub : Hub
             _logger.LogInformation("🏁 [SignalR] User {UserId} finished match in {RoomCode}. NetScore={NetScore}, Duration={DurationMs}ms, Rank=#{Rank}",
                 userId, code, playerResult.NetScore, playerResult.DurationMs, playerResult.Rank);
 
-            // // Notify players that this user finished without revealing the result
+            // Notify players that this user finished
             await Clients.Group(code).SendAsync("PlayerFinished", new
             {
                 playerResult.UserId,
@@ -320,7 +529,6 @@ public class DuelloHub : Hub
         }
     }
 
-    // Force Finish when time limit is reached
     public async Task ForceTimeUp(string roomCode)
     {
         var code = roomCode.ToUpper().Trim();
@@ -333,11 +541,7 @@ public class DuelloHub : Hub
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(
-                ex,
-                "ForceTimeUp rejected for room {RoomCode}",
-                code);
-
+            _logger.LogWarning(ex, "ForceTimeUp rejected for room {RoomCode}", code);
             throw new HubException(ex.Message);
         }
     }

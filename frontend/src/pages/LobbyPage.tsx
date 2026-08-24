@@ -8,14 +8,25 @@ import {
   type RoomUserInfo,
   type MatchStartingData,
   type PlayerProgressData,
-  type PlayerFinishedData,
   type MatchPlayerResult,
-  type MatchEndedData
+  type MatchEndedData,
+  type ZoneShrunkData,
+  type PlayerEliminatedData
 } from '../api/rooms';
 import { type SoloQuestion } from '../api/exams';
-import LiveStatusBadge from '../components/LiveStatusBadge';
+import { triggerPodiumConfetti } from '../utils/confetti';
+import {
+  playCountdownTick,
+  playCountdownGo,
+  playCorrectSound,
+  playWrongSound,
+  playVictorySound
+} from '../utils/audio';
+import MobileTopHUD from '../components/MobileTopHUD';
+import EmotePicker from '../components/EmotePicker';
+import QuestionReviewModal from '../components/QuestionReviewModal';
 
-type ViewMode = 'lobby' | 'countdown' | 'match' | 'waiting' | 'results';
+type ViewMode = 'lobby' | 'countdown' | 'match' | 'results';
 
 export default function LobbyPage() {
   const { roomCode } = useParams<{ roomCode: string }>();
@@ -40,7 +51,12 @@ export default function LobbyPage() {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [submitting, setSubmitting] = useState(false);
 
-  // Results & Podium state (FAZ 2.4)
+  // Elimination state (Battleground & Sudden Death)
+  const [isEliminated, setIsEliminated] = useState(false);
+  const [eliminationReason, setEliminationReason] = useState<string>('');
+  const [zoneAlert, setZoneAlert] = useState<string | null>(null);
+
+  // Results & Podium state
   const [myResult, setMyResult] = useState<MatchPlayerResult | null>(null);
   const [leaderboard, setLeaderboard] = useState<MatchPlayerResult[]>([]);
 
@@ -48,15 +64,11 @@ export default function LobbyPage() {
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [showReviewModal, setShowReviewModal] = useState(false);
 
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const timerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const autoSubmittedRef = useRef(false);
-  const viewModeRef = useRef<ViewMode>('lobby');
-
-  useEffect(() => {
-    viewModeRef.current = viewMode;
-  }, [viewMode]);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -64,7 +76,6 @@ export default function LobbyPage() {
     toastTimerRef.current = setTimeout(() => setToastMessage(null), 3500);
   };
 
-  // 1. Initial REST fetch for Room metadata
   useEffect(() => {
     if (!roomCode) {
       navigate('/dashboard');
@@ -89,7 +100,7 @@ export default function LobbyPage() {
       });
   }, [roomCode, navigate]);
 
-  // 2. SignalR Lobby & Gameplay events
+  // SignalR events
   useEffect(() => {
     if (!connection || status !== 'connected' || !roomCode) return;
 
@@ -98,7 +109,6 @@ export default function LobbyPage() {
     });
 
     const handleLobbyState = (state: any) => {
-      console.log('🏛️ [Lobby] Full state received:', state);
       const usersList: RoomUserInfo[] = Array.isArray(state.users)
         ? state.users
         : Object.values(state.users || {});
@@ -120,51 +130,33 @@ export default function LobbyPage() {
     };
 
     const handleUserJoined = (data: { user: RoomUserInfo; room: any }) => {
-      console.log('👤 [Lobby] User joined:', data);
-      showToast(`🎉 ${data.user.username} odaya katıldı!`);
+      showToast(`🎉 ${data.user.username} katıldı!`);
       const usersList: RoomUserInfo[] = Array.isArray(data.room.users)
         ? data.room.users
         : Object.values(data.room.users || {});
       setRoom({ ...data.room, users: usersList });
     };
 
-    const handleUserLeft = (data: {
-      userId: string;
-      username: string;
-      room?: any;
-    }) => {
-      console.log('🚪 [Lobby] User left:', data);
-      showToast(`👋 ${data.username} odadan ayrıldı.`);
-
+    const handleUserLeft = (data: { userId: string; username: string; room?: any }) => {
+      showToast(`👋 ${data.username} ayrıldı.`);
       if (data.room) {
         const usersList: RoomUserInfo[] = Array.isArray(data.room.users)
           ? data.room.users
           : Object.values(data.room.users || {});
-
         setRoom({ ...data.room, users: usersList });
-        return;
-      }
-
-      // Oda kapanmış olsa bile sonuç ekranını açık tut.
-      if (viewModeRef.current !== 'results') {
+      } else {
         navigate('/dashboard');
       }
     };
 
     const handleReadyChanged = (data: { userId: string; isReady: boolean; room: any }) => {
-      console.log('⚡ [Lobby] Ready changed:', data);
       const usersList: RoomUserInfo[] = Array.isArray(data.room.users)
         ? data.room.users
         : Object.values(data.room.users || {});
       setRoom({ ...data.room, users: usersList });
     };
 
-    // ==========================================
-    // FAZ 2.3 & 2.4 Gameplay & Podium Events
-    // ==========================================
-
     const handleMatchStarting = (data: MatchStartingData) => {
-      console.log('⚔️ [Gameplay] Match starting! Countdown initiated:', data);
       setQuestions(data.questions);
       if (data.durationSeconds) setMatchDurationSeconds(data.durationSeconds);
       const initialAnswers: Record<string, string | null> = {};
@@ -172,6 +164,7 @@ export default function LobbyPage() {
       setAnswers(initialAnswers);
       setMatchStartTime(new Date(data.startTime));
       autoSubmittedRef.current = false;
+      setIsEliminated(false);
 
       const initialProgress: Record<string, PlayerProgressData> = {};
       room?.users.forEach(u => {
@@ -180,7 +173,8 @@ export default function LobbyPage() {
           username: u.username,
           currentQuestionIndex: 0,
           answeredCount: 0,
-          progressPercentage: 0
+          progressPercentage: 0,
+          team: u.team
         };
       });
       setPlayerProgressMap(initialProgress);
@@ -188,51 +182,60 @@ export default function LobbyPage() {
       setViewMode('countdown');
       let cd = data.countdownSeconds || 3;
       setCountdownValue(cd);
+      playCountdownTick();
 
       const cdInterval = setInterval(() => {
         cd -= 1;
         if (cd <= 0) {
           clearInterval(cdInterval);
+          playCountdownGo();
           setViewMode('match');
         } else {
+          playCountdownTick();
           setCountdownValue(cd);
         }
       }, 1000);
     };
 
     const handlePlayerProgress = (data: PlayerProgressData) => {
-      console.log('📊 [Gameplay] Player progress update:', data);
       setPlayerProgressMap(prev => ({
         ...prev,
         [data.userId]: data
       }));
     };
-    const handlePlayerFinished = (data: PlayerFinishedData) => {
-      console.log('🏁 [Gameplay] Player finished:', data);
 
-      showToast(`🏁 ${data.username} sınavı tamamladı.`);
+    const handlePlayerEliminated = (data: PlayerEliminatedData) => {
+      showToast(`💀 ${data.username} elendi! (${data.reason})`);
+      if (data.userId === user?.id) {
+        playWrongSound();
+        setIsEliminated(true);
+        setEliminationReason(data.reason);
+      }
+    };
 
-      setRoom(prev => {
-        if (!prev) return prev;
+    const handleZoneShrunk = (data: ZoneShrunkData) => {
+      setZoneAlert(data.message);
+      showToast(data.message);
+      if (data.eliminatedUserIds.includes(user?.id ?? '')) {
+        playWrongSound();
+        setIsEliminated(true);
+        setEliminationReason('Alan Dışında Kaldın 💀');
+      }
+      setTimeout(() => setZoneAlert(null), 5000);
+    };
 
-        return {
-          ...prev,
-          users: prev.users.map(roomUser =>
-            roomUser.userId === data.userId
-              ? { ...roomUser, isFinished: true }
-              : roomUser
-          )
-        };
-      });
+    const handlePlayerFinished = (data: any) => {
+      showToast(`🏁 ${data.username} bitirdi!`);
     };
 
     const handleMatchEnded = (data: MatchEndedData) => {
-      console.log('🏆 [Podium] Match ended! Final podium and leaderboard:', data);
       setLeaderboard(data.leaderboard);
       const me = data.leaderboard.find(p => p.userId === user?.id);
       if (me) setMyResult(me);
       setViewMode('results');
       refreshUser();
+      playVictorySound();
+      triggerPodiumConfetti();
     };
 
     const handleLobbyError = (errMsg: string) => {
@@ -245,6 +248,8 @@ export default function LobbyPage() {
     connection.on('UserReadyChanged', handleReadyChanged);
     connection.on('MatchStarting', handleMatchStarting);
     connection.on('PlayerProgressUpdated', handlePlayerProgress);
+    connection.on('PlayerEliminated', handlePlayerEliminated);
+    connection.on('ZoneShrunk', handleZoneShrunk);
     connection.on('PlayerFinished', handlePlayerFinished);
     connection.on('MatchEnded', handleMatchEnded);
     connection.on('LobbyError', handleLobbyError);
@@ -256,27 +261,24 @@ export default function LobbyPage() {
       connection.off('UserReadyChanged', handleReadyChanged);
       connection.off('MatchStarting', handleMatchStarting);
       connection.off('PlayerProgressUpdated', handlePlayerProgress);
+      connection.off('PlayerEliminated', handlePlayerEliminated);
+      connection.off('ZoneShrunk', handleZoneShrunk);
       connection.off('PlayerFinished', handlePlayerFinished);
       connection.off('MatchEnded', handleMatchEnded);
       connection.off('LobbyError', handleLobbyError);
     };
   }, [connection, status, roomCode, room?.users, user?.id, navigate, refreshUser]);
 
-  // Synchronized Server Elapsed & Countdown Timer
+  // Timer Interval
   useEffect(() => {
-    if (
-      (viewMode === 'match' || viewMode === 'waiting') &&
-      matchStartTime
-    ) {
+    if (viewMode === 'match' && matchStartTime) {
       timerIntervalRef.current = setInterval(() => {
         const now = new Date();
         const diffSec = Math.max(0, Math.floor((now.getTime() - matchStartTime.getTime()) / 1000));
         setElapsedSeconds(diffSec);
 
-        // Auto time-up trigger
         if (matchDurationSeconds > 0 && diffSec >= matchDurationSeconds && !autoSubmittedRef.current) {
           autoSubmittedRef.current = true;
-          console.log('⏰ Time limit reached. Auto submitting match...');
           handleAutoSubmitOnTimeUp();
         }
       }, 1000);
@@ -289,31 +291,20 @@ export default function LobbyPage() {
     };
   }, [viewMode, matchStartTime, matchDurationSeconds]);
 
-  // Auto-submit when time expires
   const handleAutoSubmitOnTimeUp = async () => {
     if (!connection || !roomCode) return;
-
-    const maxAttempts = 3;
-
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      try {
-        await connection.invoke('ForceTimeUp', roomCode);
-        return;
-      } catch (e) {
-        if (attempt === maxAttempts) {
-          console.warn(
-            'ForceTimeUp failed after all retry attempts:',
-            e
-          );
-          return;
-        }
-
-        await new Promise(resolve => setTimeout(resolve, 750));
-      }
+    try {
+      const payload = Object.entries(answers).map(([qId, choice]) => ({
+        questionId: qId,
+        selectedAnswer: choice
+      }));
+      await connection.invoke('SubmitMatch', roomCode, payload);
+      await connection.invoke('ForceTimeUp', roomCode);
+    } catch (e) {
+      console.warn('Auto submit fallback:', e);
     }
   };
 
-  // Handle Start Match (Host Action)
   const handleStartMatch = async () => {
     if (!connection || !roomCode) return;
     try {
@@ -323,7 +314,6 @@ export default function LobbyPage() {
     }
   };
 
-  // Handle Toggle Ready (Participant Action)
   const handleToggleReady = async () => {
     if (!connection || !roomCode) return;
     try {
@@ -333,8 +323,9 @@ export default function LobbyPage() {
     }
   };
 
-  // Handle Choice Selection & Live Progress
   const handleSelectChoice = (questionId: string, choiceKey: string) => {
+    if (isEliminated) return;
+
     const newChoice = answers[questionId] === choiceKey ? null : choiceKey;
     const newAnswers = {
       ...answers,
@@ -345,7 +336,12 @@ export default function LobbyPage() {
     const answeredCount = Object.values(newAnswers).filter(a => a !== null).length;
 
     if (connection && roomCode && connection.state === 'Connected') {
-      connection.invoke('UpdateProgress', roomCode, currentQuestionIndex, answeredCount, questionId, newChoice).catch(() => { });
+      connection.invoke('UpdateProgress', roomCode, currentQuestionIndex, answeredCount, questionId, newChoice).catch(() => {});
+
+      // If Sudden Death mode, test answer immediately
+      if (room?.mode === 3 && newChoice) {
+        connection.invoke('SubmitSuddenDeathAnswer', roomCode, questionId, newChoice).catch(() => {});
+      }
     }
   };
 
@@ -353,24 +349,15 @@ export default function LobbyPage() {
     setCurrentQuestionIndex(newIndex);
     const answeredCount = Object.values(answers).filter(a => a !== null).length;
     if (connection && roomCode && connection.state === 'Connected') {
-      connection.invoke('UpdateProgress', roomCode, newIndex, answeredCount, null, null).catch(() => { });
+      connection.invoke('UpdateProgress', roomCode, newIndex, answeredCount, null, null).catch(() => {});
     }
   };
 
-  // Handle Manual Match Submit
   const handleSubmitMatch = async () => {
-    if (!connection || !roomCode || submitting) return;
-
-    const confirmed = confirm(
-      'Sınavı bitirmek istediğinize emin misiniz?\n\n' +
-      'Bitirdikten sonra cevaplarınızı değiştiremezsiniz.'
-    );
-
-    if (!confirmed) return;
+    if (!connection || !roomCode) return;
+    if (!confirm('Sınavı bitirmek istediğinize emin misiniz?')) return;
 
     setSubmitting(true);
-    setViewMode('waiting');
-
     try {
       const payload = Object.entries(answers).map(([qId, choice]) => ({
         questionId: qId,
@@ -378,27 +365,11 @@ export default function LobbyPage() {
       }));
 
       await connection.invoke('SubmitMatch', roomCode, payload);
+      setViewMode('results');
     } catch (e: any) {
+      alert(e.message || 'Sınav gönderilirken hata oluştu.');
       setSubmitting(false);
-      setViewMode('match');
-
-      alert(e.message || 'Sınav gönderilirken bir hata oluştu.');
     }
-  };
-  const handleExitResults = async () => {
-    if (
-      connection &&
-      roomCode &&
-      connection.state === 'Connected'
-    ) {
-      try {
-        await connection.invoke('LeaveLobby', roomCode);
-      } catch (e) {
-        console.warn('Result exit LeaveLobby error:', e);
-      }
-    }
-
-    navigate('/dashboard');
   };
 
   const handleLeaveRoom = async () => {
@@ -420,13 +391,6 @@ export default function LobbyPage() {
     setTimeout(() => setCopiedCode(false), 2000);
   };
 
-  const copyInviteLink = () => {
-    const link = window.location.href;
-    navigator.clipboard.writeText(link);
-    setCopiedLink(true);
-    setTimeout(() => setCopiedLink(false), 2000);
-  };
-
   const formatTimer = (totalSeconds: number) => {
     const m = Math.floor(totalSeconds / 60);
     const s = totalSeconds % 60;
@@ -436,8 +400,11 @@ export default function LobbyPage() {
   // Loading Screen
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-[var(--color-text-muted)] text-lg animate-pulse">Lobi yükleniyor...</div>
+      <div className="min-h-screen bg-[#060710] flex justify-center items-center">
+        <div className="w-full max-w-md mobile-app-shell flex flex-col items-center justify-center p-6">
+          <div className="w-12 h-12 border-3 border-violet-500 border-t-transparent rounded-full animate-spin mb-4" />
+          <div className="text-white font-black text-sm">Lobiye Bağlanılıyor...</div>
+        </div>
       </div>
     );
   }
@@ -445,17 +412,16 @@ export default function LobbyPage() {
   // Error Screen
   if (error || !room) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4">
-        <div className="bg-[var(--color-surface)] max-w-md w-full rounded-2xl p-8 text-center shadow-xl">
-          <div className="text-4xl mb-4">⚠️</div>
-          <h2 className="text-xl font-bold mb-2">Lobiye Ulaşılamadı</h2>
-          <p className="text-[var(--color-text-muted)] mb-6 text-sm">{error || 'Oda bulunamadı veya süresi doldu.'}</p>
+      <div className="min-h-screen bg-[#060710] flex justify-center items-center p-4">
+        <div className="w-full max-w-md mobile-app-shell flex flex-col items-center justify-center p-6 text-center">
+          <div className="text-5xl mb-3">⚠️</div>
+          <h3 className="text-xl font-black text-white mb-1">Lobi Bulunamadı</h3>
+          <p className="text-xs text-slate-400 mb-6">{error || 'Oda kapandı veya süresi doldu.'}</p>
           <button
-            onClick={handleExitResults}
-            title="Sonuçlardan çık"
-            aria-label="Sonuçlardan çık ve Dashboard'a dön"
-            className="w-10 h-10 flex items-center justify-center bg-[var(--color-primary)] hover:bg-[var(--color-primary-dark)] text-white text-xl font-bold rounded-xl transition cursor-pointer"
-          > ✕
+            onClick={() => navigate('/dashboard')}
+            className="w-full py-4 rounded-2xl btn-game-primary text-white font-black text-sm uppercase cursor-pointer"
+          >
+            Ana Menüye Dön
           </button>
         </div>
       </div>
@@ -469,699 +435,468 @@ export default function LobbyPage() {
   const currentQuestion = questions[currentQuestionIndex];
   const myAnsweredCount = Object.values(answers).filter(a => a !== null).length;
   const remainingSeconds = Math.max(0, matchDurationSeconds - elapsedSeconds);
-  const finishedPlayers = room.users.filter(player => player.isFinished);
-  const finishedPlayerCount = finishedPlayers.length;
-  const totalPlayerCount = room.users.length;
 
-  // ==========================================
-  // VIEW: 3-2-1 COUNTDOWN OVERLAY
-  // ==========================================
-  if (viewMode === 'countdown') {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-[var(--color-bg)] relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-b from-[var(--color-primary)]/10 to-transparent pointer-events-none" />
-        <div className="text-center z-10 px-4">
-          <div className="text-sm uppercase tracking-widest text-[var(--color-primary)] font-bold mb-4">
-            ⚔️ Düello Başlıyor!
+  return (
+    <div className="min-h-screen bg-[#060710] flex justify-center">
+      <div className="w-full max-w-md mobile-app-shell flex flex-col justify-between relative overflow-hidden">
+        
+        {/* Top Game HUD */}
+        <MobileTopHUD />
+
+        {/* Toast */}
+        {toastMessage && (
+          <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 bg-gradient-to-r from-violet-600 to-purple-600 border border-white/20 text-white px-4 py-2 rounded-2xl shadow-2xl text-xs font-black animate-bounce whitespace-nowrap">
+            {toastMessage}
           </div>
-          <h1 className="text-3xl font-extrabold text-white mb-8">{room.title}</h1>
-          <div className="w-40 h-40 mx-auto rounded-full bg-[var(--color-surface)] border-4 border-[var(--color-primary)] flex items-center justify-center shadow-2xl shadow-[var(--color-primary)]/40 animate-pulse">
-            <span className="text-7xl font-black text-[var(--color-primary)] font-mono">
-              {countdownValue > 0 ? countdownValue : '🔥'}
-            </span>
-          </div>
-          <p className="text-[var(--color-text-muted)] text-sm mt-8 animate-bounce">
-            Hazırlan, ilk soru yükleniyor...
-          </p>
-        </div>
-      </div>
-    );
-  }
-  // ==========================================
-  // VIEW: WAITING FOR OTHER PLAYERS
-  // ==========================================
-  if (viewMode === 'waiting') {
-    return (
-      <div className="min-h-screen bg-[var(--color-bg)] flex items-center justify-center p-4">
-        <div className="w-full max-w-2xl bg-[var(--color-surface)] rounded-3xl shadow-xl p-6 md:p-8">
-          <div className="text-center mb-8">
-            <div className="text-5xl mb-4">✅</div>
+        )}
 
-            <h1 className="text-2xl md:text-3xl font-bold mb-2">
-              Sınavın tamamlandı
-            </h1>
+        {/* ==========================================
+            VIEW 1: COUNTDOWN OVERLAY
+            ========================================== */}
+        {viewMode === 'countdown' && (
+          <main className="flex-1 flex flex-col items-center justify-center p-6 text-center space-y-6 animate-fadeIn">
+            <div className="inline-flex items-center gap-2 px-4 py-1 rounded-full bg-violet-500/20 border border-violet-500/40 text-violet-300 text-xs font-black uppercase tracking-widest animate-pulse">
+              ⚔️ DÜELLO BAŞLIYOR!
+            </div>
 
-            <p className="text-[var(--color-text-muted)]">
-              Diğer oyuncuların sınavı bitirmesi bekleniyor.
+            <h2 className="text-2xl font-black text-white">{room.title}</h2>
+
+            <div className="w-40 h-40 mx-auto rounded-full bg-gradient-to-tr from-violet-600 to-cyan-400 p-1 shadow-2xl animate-bounce-subtle">
+              <div className="w-full h-full bg-[#0d0f22] rounded-full flex items-center justify-center">
+                <span className="text-7xl font-black text-white font-mono">
+                  {countdownValue > 0 ? countdownValue : '🔥'}
+                </span>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-300 font-bold">
+              Hazırlan! İlk soru ekrana yükleniyor...
             </p>
-          </div>
+          </main>
+        )}
 
-          <div className="grid grid-cols-2 gap-4 mb-8">
-            <div className="rounded-2xl bg-[var(--color-bg)] p-4 text-center">
-              <div className="text-sm text-[var(--color-text-muted)] mb-1">
-                Kalan süre
+        {/* ==========================================
+            VIEW 2: MATCH RESULTS & 3D PODIUM
+            ========================================== */}
+        {viewMode === 'results' && (
+          <main className="flex-1 p-4 overflow-y-auto no-scrollbar space-y-4 animate-fadeIn">
+            <div className="text-center pt-2">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-300 text-[10px] font-black uppercase tracking-wider mb-2">
+                🏆 SAVAŞ SONA ERDİ
               </div>
-
-              <div className="text-2xl font-bold text-[var(--color-primary)]">
-                {formatTimer(remainingSeconds)}
-              </div>
+              <h2 className="text-xl font-black text-white">{room.title}</h2>
             </div>
 
-            <div className="rounded-2xl bg-[var(--color-bg)] p-4 text-center">
-              <div className="text-sm text-[var(--color-text-muted)] mb-1">
-                Tamamlayanlar
-              </div>
-
-              <div className="text-2xl font-bold">
-                {finishedPlayerCount}/{totalPlayerCount}
-              </div>
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            {room.users.map(player => (
-              <div
-                key={player.userId}
-                className="flex items-center justify-between rounded-xl border border-white/10 p-4"
-              >
-                <div>
-                  <div className="font-semibold">
-                    {player.username}
-                    {player.userId === user?.id ? ' (Sen)' : ''}
+            {/* Mobile 3D Podium Block */}
+            <div className="game-card-3d p-4 pt-8">
+              <div className="flex items-end justify-center gap-2 max-w-xs mx-auto">
+                {leaderboard[1] && (
+                  <div className="flex-1 flex flex-col items-center">
+                    <div className="text-2xl mb-1">🥈</div>
+                    <div className="text-[10px] font-bold text-white truncate max-w-[70px]">{leaderboard[1].username}</div>
+                    <div className="text-[9px] font-mono text-cyan-400 font-bold mb-1">{leaderboard[1].netScore.toFixed(1)} N</div>
+                    <div className="w-full bg-slate-600/40 border-t-2 border-slate-400 rounded-t-xl h-24 flex flex-col items-center justify-center">
+                      <span className="font-black text-slate-200 text-lg">2</span>
+                      <span className="text-[8px] text-slate-300 font-bold">+{leaderboard[1].coinsGained} 💰</span>
+                    </div>
                   </div>
+                )}
 
-                  <div className="text-sm text-[var(--color-text-muted)]">
-                    Seviye {player.level}
+                {leaderboard[0] && (
+                  <div className="flex-1 flex flex-col items-center">
+                    <div className="text-3xl mb-1 animate-bounce-subtle">👑</div>
+                    <div className="text-xs font-black text-amber-300 truncate max-w-[80px]">{leaderboard[0].username}</div>
+                    <div className="text-[10px] font-mono text-emerald-400 font-black mb-1">{leaderboard[0].netScore.toFixed(1)} N</div>
+                    <div className="w-full bg-amber-500/30 border-t-2 border-amber-400 rounded-t-xl h-36 flex flex-col items-center justify-center">
+                      <span className="font-black text-amber-300 text-2xl">1</span>
+                      <span className="text-[9px] text-amber-200 font-black">+{leaderboard[0].coinsGained} 💰</span>
+                    </div>
                   </div>
-                </div>
+                )}
 
-                {player.isFinished ? (
-                  <span className="rounded-full bg-green-500/15 text-green-500 px-3 py-1 text-sm font-semibold">
-                    Tamamladı
-                  </span>
-                ) : (
-                  <span className="rounded-full bg-yellow-500/15 text-yellow-500 px-3 py-1 text-sm font-semibold animate-pulse">
-                    Devam ediyor
-                  </span>
+                {leaderboard[2] && (
+                  <div className="flex-1 flex flex-col items-center">
+                    <div className="text-2xl mb-1">🥉</div>
+                    <div className="text-[10px] font-bold text-white truncate max-w-[70px]">{leaderboard[2].username}</div>
+                    <div className="text-[9px] font-mono text-cyan-400 font-bold mb-1">{leaderboard[2].netScore.toFixed(1)} N</div>
+                    <div className="w-full bg-amber-900/40 border-t-2 border-amber-700 rounded-t-xl h-18 flex flex-col items-center justify-center">
+                      <span className="font-black text-amber-600 text-base">3</span>
+                      <span className="text-[8px] text-amber-500 font-bold">+{leaderboard[2].coinsGained} 💰</span>
+                    </div>
+                  </div>
                 )}
               </div>
-            ))}
-          </div>
-
-          <div className="mt-8 flex items-center justify-center gap-3 text-sm text-[var(--color-text-muted)]">
-            <div className="w-4 h-4 rounded-full border-2 border-[var(--color-primary)] border-t-transparent animate-spin" />
-            Maç tamamlandığında sonuçlar otomatik açılacak.
-          </div>
-        </div>
-      </div>
-    );
-  }
-  // ==========================================
-  // VIEW: FAZ 2.4 3D-STYLE PODIUM & REWARDS
-  // ==========================================
-  if (viewMode === 'results') {
-    const sortedLeaderboard = leaderboard.length > 0
-      ? leaderboard
-      : room.users.map(u => ({
-        userId: u.userId,
-        username: u.username,
-        level: u.level || 1,
-        rank: u.rank || 1,
-        netScore: u.netScore || 0,
-        durationMs: u.durationMs || 0,
-        correctCount: u.correctCount || 0,
-        wrongCount: u.wrongCount || 0,
-        blankCount: u.blankCount || 0,
-        xpGained: u.xpGained || 0,
-        coinsGained: u.coinsGained || 0,
-        isFinished: u.isFinished || false
-      })).sort((a, b) => b.netScore - a.netScore || a.durationMs - b.durationMs);
-
-    const firstPlace = sortedLeaderboard[0];
-    const secondPlace = sortedLeaderboard[1];
-    const thirdPlace = sortedLeaderboard[2];
-
-    return (
-      <div className="min-h-screen flex flex-col bg-[var(--color-bg)]">
-        {/* Header */}
-        <header className="bg-[var(--color-surface)] border-b border-[var(--color-surface-light)] px-6 py-4">
-          <div className="max-w-5xl mx-auto flex items-center justify-between">
-            <h1 className="text-2xl font-bold text-[var(--color-primary)]">duello.lab</h1>
-            <button
-              onClick={() => navigate('/dashboard')}
-              className="px-4 py-2 bg-[var(--color-primary)] hover:bg-[var(--color-primary-dark)] text-white text-sm font-semibold rounded-xl transition cursor-pointer"
-            >
-              Dashboard'a Dön
-            </button>
-          </div>
-        </header>
-
-        <main className="flex-1 max-w-4xl mx-auto w-full p-6">
-          {/* Trophy Header */}
-          <div className="text-center mb-8">
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-bold uppercase tracking-wider mb-2">
-              <span>🏆 Düello Sonuçlandı</span>
             </div>
-            <h2 className="text-3xl font-extrabold text-white">{room.title}</h2>
-            <p className="text-sm text-[var(--color-text-muted)] mt-1">{room.category} Kategorisi • 2 Yanlış 1 Doğruyu Götürür</p>
-          </div>
 
-          {/* 3D-STYLE PODIUM STAGE */}
-          <div className="bg-gradient-to-b from-[var(--color-surface)] to-[var(--color-surface-light)]/40 rounded-3xl p-8 mb-8 border border-[var(--color-surface-light)] shadow-2xl">
-            <div className="flex items-end justify-center gap-3 sm:gap-6 pt-10 pb-4">
-              {/* 2nd Place (Silver - Left) */}
-              {secondPlace && (
-                <div className="flex-1 flex flex-col items-center max-w-[170px]">
-                  <div className="text-3xl mb-1 drop-shadow">🥈</div>
-                  <div className="text-xs font-bold text-white truncate max-w-full mb-1">
-                    {secondPlace.username}
-                  </div>
-                  <div className="text-[11px] font-mono text-emerald-400 font-bold mb-2">
-                    {secondPlace.netScore.toFixed(1)} Net
-                  </div>
-                  {/* Pedestal */}
-                  <div className="w-full bg-gradient-to-b from-slate-400/30 to-slate-600/40 border-t-4 border-slate-300 rounded-t-2xl h-36 flex flex-col items-center justify-center shadow-lg">
-                    <span className="text-3xl font-black text-slate-300">2</span>
-                    <span className="text-[10px] text-slate-300 font-semibold mt-1">
-                      +50 XP • +20 💰
-                    </span>
+            {myResult && (
+              <div className="bg-[#171b38] border-2 border-violet-500 rounded-2xl p-4 flex items-center justify-between shadow-xl">
+                <div>
+                  <div className="text-[10px] text-violet-400 font-bold uppercase">Senin Derecen</div>
+                  <div className="text-lg font-black text-white font-mono">Sıralama: #{myResult.rank}</div>
+                  <div className="text-[10px] text-slate-400 font-mono mt-0.5">
+                    {myResult.correctCount}D • {myResult.wrongCount}Y • {myResult.blankCount}B • {(myResult.durationMs / 1000).toFixed(1)}s
                   </div>
                 </div>
-              )}
-
-              {/* 1st Place (Gold - Center / Highest) */}
-              {firstPlace && (
-                <div className="flex-1 flex flex-col items-center max-w-[200px]">
-                  <div className="text-5xl mb-1 animate-bounce drop-shadow">👑</div>
-                  <div className="text-sm font-extrabold text-amber-300 truncate max-w-full mb-1">
-                    {firstPlace.username}
+                <div className="flex gap-2">
+                  <div className="bg-violet-600/30 border border-violet-500/40 px-2.5 py-1.5 rounded-xl text-center">
+                    <div className="text-[8px] text-slate-400 font-bold">XP</div>
+                    <div className="text-xs font-black text-violet-300 font-mono">+{myResult.xpGained}</div>
                   </div>
-                  <div className="text-xs font-mono text-emerald-400 font-extrabold mb-2">
-                    {firstPlace.netScore.toFixed(1)} Net • {(firstPlace.durationMs / 1000).toFixed(1)}s
+                  <div className="bg-amber-500/20 border border-amber-500/40 px-2.5 py-1.5 rounded-xl text-center">
+                    <div className="text-[8px] text-slate-400 font-bold">Coin</div>
+                    <div className="text-xs font-black text-amber-300 font-mono">+{myResult.coinsGained} 💰</div>
                   </div>
-                  {/* Pedestal */}
-                  <div className="w-full bg-gradient-to-b from-amber-500/30 to-amber-700/40 border-t-4 border-amber-400 rounded-t-2xl h-48 flex flex-col items-center justify-center shadow-xl relative overflow-hidden">
-                    <div className="text-4xl font-black text-amber-300">1</div>
-                    <span className="text-xs text-amber-300 font-bold mt-1 uppercase tracking-wider">Şampiyon</span>
-                    <span className="text-[11px] text-amber-200 font-bold mt-0.5">
-                      +100 XP • +40 💰
-                    </span>
-                  </div>
-                </div>
-              )}
-
-              {/* 3rd Place (Bronze - Right) */}
-              {thirdPlace && (
-                <div className="flex-1 flex flex-col items-center max-w-[170px]">
-                  <div className="text-3xl mb-1 drop-shadow">🥉</div>
-                  <div className="text-xs font-bold text-white truncate max-w-full mb-1">
-                    {thirdPlace.username}
-                  </div>
-                  <div className="text-[11px] font-mono text-emerald-400 font-bold mb-2">
-                    {thirdPlace.netScore.toFixed(1)} Net
-                  </div>
-                  {/* Pedestal */}
-                  <div className="w-full bg-gradient-to-b from-amber-900/30 to-amber-950/40 border-t-4 border-amber-700 rounded-t-2xl h-28 flex flex-col items-center justify-center shadow-lg">
-                    <span className="text-3xl font-black text-amber-600">3</span>
-                    <span className="text-[10px] text-amber-600 font-semibold mt-1">
-                      +25 XP • +10 💰
-                    </span>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* User's Reward Summary Card */}
-          {myResult && (
-            <div className="bg-[var(--color-surface)] border-2 border-[var(--color-primary)] rounded-2xl p-6 mb-8 shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4">
-              <div>
-                <span className="text-xs text-[var(--color-primary)] font-bold uppercase tracking-wider">Senin Başarın</span>
-                <h4 className="text-xl font-bold text-white">Sıralama: #{myResult.rank}</h4>
-                <p className="text-xs text-[var(--color-text-muted)] mt-1">
-                  {myResult.correctCount} Doğru • {myResult.wrongCount} Yanlış • {myResult.blankCount} Boş • {(myResult.durationMs / 1000).toFixed(1)} sn
-                </p>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <div className="bg-[var(--color-accent)]/15 border border-[var(--color-accent)]/30 px-4 py-2 rounded-xl text-center">
-                  <span className="text-[10px] text-[var(--color-text-muted)] block">Kazanılan XP</span>
-                  <span className="text-lg font-bold text-[var(--color-accent)]">+{myResult.xpGained} XP</span>
-                </div>
-                <div className="bg-[var(--color-warning)]/15 border border-[var(--color-warning)]/30 px-4 py-2 rounded-xl text-center">
-                  <span className="text-[10px] text-[var(--color-text-muted)] block">Kazanılan Coin</span>
-                  <span className="text-lg font-bold text-[var(--color-warning)]">+{myResult.coinsGained} 💰</span>
                 </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {/* Full Leaderboard Table */}
-          <h3 className="text-xl font-bold text-white mb-4">🏅 Tüm Katılımcılar</h3>
-          <div className="space-y-3 mb-8">
-            {sortedLeaderboard.map((player, idx) => {
-              const isMe = player.userId === user?.id;
-              const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}`;
-
-              return (
+            <div className="space-y-2">
+              <div className="text-xs font-black text-slate-300 px-1">Tüm Oyuncular</div>
+              {leaderboard.map((p, idx) => (
                 <div
-                  key={player.userId}
-                  className={`bg-[var(--color-surface)] rounded-2xl p-5 border-2 flex items-center justify-between transition-all ${isMe
-                    ? 'border-[var(--color-primary)] shadow-lg shadow-[var(--color-primary)]/10'
-                    : 'border-[var(--color-surface-light)]'
-                    }`}
+                  key={p.userId}
+                  className={`p-3 rounded-2xl border flex items-center justify-between ${
+                    p.userId === user?.id ? 'bg-violet-950/40 border-violet-500' : 'bg-[#171b38] border-white/5'
+                  }`}
                 >
-                  <div className="flex items-center gap-4">
-                    <span className="text-2xl font-bold font-mono w-10 text-center">{medal}</span>
+                  <div className="flex items-center gap-2.5">
+                    <span className="font-mono font-black text-base w-6 text-center">
+                      {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}`}
+                    </span>
                     <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-white text-base">{player.username}</span>
-                        {isMe && (
-                          <span className="text-[10px] bg-[var(--color-primary)] text-white px-2 py-0.5 rounded-full font-bold">
-                            SEN
-                          </span>
-                        )}
+                      <div className="text-xs font-black text-white flex items-center gap-1.5">
+                        <span>{p.username}</span>
+                        {p.isEliminated && <span className="text-[8px] bg-rose-600 text-white px-1 rounded font-bold">ELENDİ</span>}
                       </div>
-                      <div className="text-xs text-[var(--color-text-muted)] mt-0.5">
-                        {player.correctCount} Doğru • {player.wrongCount} Yanlış • {player.blankCount} Boş • {(player.durationMs / 1000).toFixed(1)} sn
+                      <div className="text-[9px] text-slate-400 font-mono">
+                        {(p.durationMs / 1000).toFixed(1)}s
                       </div>
                     </div>
                   </div>
 
                   <div className="text-right">
-                    <div className="text-2xl font-bold text-[var(--color-success)]">
-                      {player.netScore.toFixed(1)} <span className="text-xs font-normal text-[var(--color-text-muted)]">Net</span>
-                    </div>
-                    <div className="text-xs text-[var(--color-accent)] font-semibold mt-0.5">
-                      +{player.xpGained} XP • +{player.coinsGained} 💰
-                    </div>
+                    <div className="text-sm font-black text-emerald-400 font-mono">{p.netScore.toFixed(1)} Net</div>
+                    <div className="text-[9px] text-amber-300 font-bold">+{p.coinsGained} 💰</div>
                   </div>
                 </div>
-              );
-            })}
-          </div>
+              ))}
+            </div>
 
-          <button
-            onClick={() => navigate('/dashboard')}
-            className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-dark)] text-white font-bold py-4 rounded-xl shadow-lg transition cursor-pointer"
-          >
-            Dashboard'a Dön
-          </button>
-        </main>
-      </div>
-    );
-  }
+            <div className="space-y-2 pt-1">
+              <button
+                onClick={() => setShowReviewModal(true)}
+                className="w-full py-3.5 rounded-2xl btn-game-gold font-black text-xs uppercase flex items-center justify-center gap-2 cursor-pointer shadow-lg active:scale-95"
+              >
+                <span>🔍 Yanlışlarımı İncele & Çözüm Analizi</span>
+              </button>
 
-  // ==========================================
-  // VIEW: LIVE MULTIPLAYER EXAM (MATCH)
-  // ==========================================
-  if (viewMode === 'match') {
-    return (
-      <div className="min-h-screen flex flex-col">
-        {/* Toast */}
-        {toastMessage && (
-          <div className="fixed top-6 right-6 z-50 bg-[var(--color-surface-light)] border border-[var(--color-primary)] text-white px-5 py-3 rounded-xl shadow-2xl animate-bounce text-sm">
-            {toastMessage}
-          </div>
+              <button
+                onClick={() => navigate('/dashboard')}
+                className="w-full py-3.5 rounded-2xl btn-game-primary text-white font-black text-xs uppercase cursor-pointer"
+              >
+                Ana Menüye Dön 🏠
+              </button>
+            </div>
+          </main>
         )}
 
-        {/* Top Header with Synchronized Server Timer & Countdown */}
-        <header className="bg-[var(--color-surface)] border-b border-[var(--color-surface-light)] px-6 py-3 sticky top-0 z-30 shadow-md">
-          <div className="max-w-5xl mx-auto flex items-center justify-between">
-            <div>
-              <h1 className="text-lg font-bold text-[var(--color-primary)]">{room.title}</h1>
-              <span className="text-xs text-[var(--color-text-muted)]">{room.category} • Soru {currentQuestionIndex + 1}/{totalQuestions}</span>
-            </div>
+        {/* ==========================================
+            VIEW 3: LIVE MULTIPLAYER GAMEPLAY
+            ========================================== */}
+        {viewMode === 'match' && (
+          <main className="flex-1 p-3.5 flex flex-col justify-between space-y-3 animate-fadeIn">
+            
+            {/* Safe Zone Alert Banner */}
+            {zoneAlert && (
+              <div className="bg-rose-600 text-white text-xs font-black p-2.5 rounded-2xl text-center animate-pulse border border-rose-300 shadow-xl">
+                {zoneAlert}
+              </div>
+            )}
 
-            {/* Central Server-Synced Timer */}
-            <div className="flex items-center gap-6">
-              <div className="bg-[var(--color-surface-light)] px-4 py-2 rounded-xl border border-white/5 text-center">
-                <div className="text-xs text-[var(--color-text-muted)] uppercase tracking-wider font-semibold">Kalan Süre</div>
-                <div className={`text-2xl font-mono font-extrabold ${remainingSeconds < 30 ? 'text-[var(--color-danger)] animate-pulse' : 'text-[var(--color-accent)]'}`}>
-                  {formatTimer(remainingSeconds)}
+            {/* Elimination Overlay */}
+            {isEliminated && (
+              <div className="bg-rose-950/90 border-2 border-rose-500 rounded-2xl p-3 text-center space-y-1 animate-bounce">
+                <div className="text-xl">💀 ELENDİN!</div>
+                <div className="text-[11px] text-rose-200 font-bold">{eliminationReason || 'Mücadele dışı kaldın.'}</div>
+                <div className="text-[9px] text-slate-400">Diğer oyuncuları izleyebilirsin.</div>
+              </div>
+            )}
+
+            {/* Top VS Battle Progress Bar */}
+            <div className="game-card-3d p-3 space-y-2">
+              <div className="flex items-center justify-between text-[11px] font-black">
+                <span className="text-white flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                  Soru {currentQuestionIndex + 1} / {totalQuestions}
+                </span>
+
+                <div className={`px-2.5 py-0.5 rounded-lg font-mono font-black ${
+                  remainingSeconds < 30 ? 'bg-rose-500 text-white animate-pulse' : 'bg-white/10 text-cyan-400'
+                }`}>
+                  ⏱️ {formatTimer(remainingSeconds)}
                 </div>
               </div>
-              <div className="text-center hidden sm:block">
-                <div className="text-xs text-[var(--color-text-muted)]">Cevaplanan</div>
-                <div className="text-lg font-bold text-white">{myAnsweredCount}/{totalQuestions}</div>
+
+              {/* Progress Tracks */}
+              <div className="space-y-1.5 pt-1">
+                {room.users.map((p) => {
+                  const isMe = p.userId === user?.id;
+                  const prog = playerProgressMap[p.userId] || {
+                    currentQuestionIndex: p.currentQuestionIndex || 0,
+                    answeredCount: p.answeredCount || 0,
+                    progressPercentage: p.progressPercentage || 0,
+                    team: p.team
+                  };
+                  const percentage = isMe
+                    ? (totalQuestions > 0 ? Math.round((myAnsweredCount / totalQuestions) * 100) : 0)
+                    : prog.progressPercentage;
+
+                  return (
+                    <div key={p.userId} className="space-y-0.5">
+                      <div className="flex items-center justify-between text-[10px] font-bold">
+                        <span className={`flex items-center gap-1 ${isMe ? 'text-violet-300' : 'text-slate-300'}`}>
+                          {p.team && (
+                            <span className={`text-[8px] px-1 py-0.2 rounded font-black ${p.team === 'Red' ? 'bg-rose-600 text-white' : 'bg-cyan-600 text-white'}`}>
+                              {p.team}
+                            </span>
+                          )}
+                          <span>{p.username} {isMe && '(SEN)'}</span>
+                        </span>
+                        <span className="font-mono text-cyan-400">{percentage}%</span>
+                      </div>
+                      <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-300 ${
+                            p.team === 'Blue' ? 'bg-cyan-400' : isMe ? 'bg-gradient-to-r from-violet-500 to-cyan-400' : 'bg-emerald-400'
+                          }`}
+                          style={{ width: `${percentage}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
-          </div>
-        </header>
 
-        <main className="flex-1 max-w-5xl mx-auto w-full p-6">
-          {/* LIVE OPPONENTS PROGRESS TRACKER */}
-          <div className="bg-[var(--color-surface)] rounded-2xl p-5 mb-6 border border-[var(--color-surface-light)] shadow-lg">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                ⚔️ Canlı Rakip İlerlemesi
-              </span>
-              <span className="text-xs text-[var(--color-text-muted)]">Anlık soket senkronizasyonu</span>
+            {/* Question Text Box */}
+            {currentQuestion ? (
+              <div className="game-card-3d p-4 flex-1 flex flex-col justify-between overflow-y-auto no-scrollbar space-y-3">
+                <div>
+                  <div className="inline-block px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase bg-violet-500/20 text-violet-300 border border-violet-500/30 mb-2">
+                    {currentQuestion.branch}
+                  </div>
+                  <p className="text-sm font-semibold text-slate-100 leading-relaxed whitespace-pre-wrap">
+                    {currentQuestion.questionText}
+                  </p>
+
+                  {currentQuestion.imageUrl && (
+                    <div className="mt-2 mb-2">
+                      <img src={currentQuestion.imageUrl} alt="Soru" className="max-w-full rounded-xl border border-white/10" />
+                    </div>
+                  )}
+                </div>
+
+                {/* Choices */}
+                <div className="space-y-2 pt-2">
+                  {Object.entries(currentQuestion.choices).map(([key, text]) => {
+                    const isSelected = answers[currentQuestion.id] === key;
+
+                    return (
+                      <button
+                        key={key}
+                        disabled={isEliminated}
+                        onClick={() => handleSelectChoice(currentQuestion.id, key)}
+                        className={`w-full text-left p-3 rounded-2xl flex items-center font-bold text-xs cursor-pointer select-none disabled:opacity-40 ${
+                          isSelected ? 'btn-game-choice selected' : 'btn-game-choice text-slate-200'
+                        }`}
+                      >
+                        <span className={`w-7 h-7 rounded-xl flex items-center justify-center mr-3 text-xs font-black font-mono ${
+                          isSelected ? 'bg-white text-purple-900 shadow' : 'bg-black/30 text-slate-400'
+                        }`}>
+                          {key}
+                        </span>
+                        <span className="flex-1">{text}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              <div className="p-8 text-center text-slate-400 text-xs">Soru bulunamadı.</div>
+            )}
+
+            {/* Bottom Controls */}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => handleNavigateQuestion(Math.max(0, currentQuestionIndex - 1))}
+                disabled={currentQuestionIndex === 0}
+                className="w-1/3 py-3.5 rounded-2xl bg-[#171b38] border border-white/10 text-white font-black text-xs uppercase disabled:opacity-30 cursor-pointer active:scale-95"
+              >
+                ← Geri
+              </button>
+
+              {currentQuestionIndex === totalQuestions - 1 ? (
+                <button
+                  onClick={handleSubmitMatch}
+                  disabled={submitting || isEliminated}
+                  className="flex-1 py-3.5 rounded-2xl btn-game-success text-white font-black text-xs uppercase cursor-pointer disabled:opacity-50"
+                >
+                  {submitting ? 'Gönderiliyor...' : 'Sınavı Bitir ✓'}
+                </button>
+              ) : (
+                <button
+                  onClick={() => handleNavigateQuestion(Math.min(totalQuestions - 1, currentQuestionIndex + 1))}
+                  className="flex-1 py-3.5 rounded-2xl btn-game-primary text-white font-black text-xs uppercase cursor-pointer"
+                >
+                  İleri ➔
+                </button>
+              )}
             </div>
 
-            <div className="space-y-3">
-              {room.users.map((player) => {
-                const isMe = player.userId === user?.id;
-                const prog = playerProgressMap[player.userId] || {
-                  currentQuestionIndex: player.currentQuestionIndex || 0,
-                  answeredCount: player.answeredCount || 0,
-                  progressPercentage: player.progressPercentage || 0
-                };
-                const percentage = isMe
-                  ? (totalQuestions > 0 ? Math.round((myAnsweredCount / totalQuestions) * 100) : 0)
-                  : prog.progressPercentage;
+          </main>
+        )}
+
+        {/* ==========================================
+            VIEW 4: DEFAULT LOBBY ROOM VIEW
+            ========================================== */}
+        {viewMode === 'lobby' && (
+          <main className="flex-1 p-4 overflow-y-auto no-scrollbar space-y-4 animate-fadeIn">
+            
+            <div className="game-card-3d p-4 text-center space-y-2">
+              <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                LOBİ KODU
+              </div>
+              <div className="text-4xl font-mono font-black text-violet-300 tracking-widest">
+                {room.roomCode}
+              </div>
+              <div className="flex gap-2 justify-center pt-1">
+                <button
+                  onClick={copyCode}
+                  className="px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 text-[11px] font-bold text-slate-300 hover:text-white cursor-pointer active:scale-95"
+                >
+                  {copiedCode ? '✓ Kopyalandı' : '📋 Kodu Kopyala'}
+                </button>
+              </div>
+            </div>
+
+            <div className="bg-[#171b38] border border-white/10 rounded-2xl p-3 flex items-center justify-between text-xs">
+              <div>
+                <div className="font-black text-white">{room.title}</div>
+                <div className="text-[10px] text-slate-400">{room.category} • {room.questionCount} Soru</div>
+              </div>
+              <div className="text-[10px] font-bold text-amber-300 bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 rounded-lg">
+                Lider: {room.hostUsername}
+              </div>
+            </div>
+
+            {/* Players List */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-xs font-black px-1">
+                <span className="text-white">Oyuncular ({room.users.length}/{room.maxPlayers})</span>
+                <span className="text-slate-400 text-[10px]">⚡ Anlık Senkron</span>
+              </div>
+
+              {room.users.map((participant) => {
+                const isUserHost = participant.userId === room.hostUserId || participant.isHost;
+                const isMe = participant.userId === user?.id;
 
                 return (
-                  <div key={player.userId} className="space-y-1">
-                    <div className="flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-white">{player.username}</span>
-                        {isMe && (
-                          <span className="text-[10px] bg-[var(--color-primary)] text-white px-1.5 py-0.2 rounded font-bold">
-                            SEN
-                          </span>
+                  <div
+                    key={participant.userId}
+                    className={`p-3 rounded-2xl border flex items-center justify-between ${
+                      isMe ? 'bg-violet-950/40 border-violet-500' : 'bg-[#171b38] border-white/5'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-violet-600 to-cyan-400 p-[1.5px] relative">
+                        <div className="w-full h-full bg-[#0d0f22] rounded-[10px] flex items-center justify-center font-black text-white text-sm font-mono">
+                          {participant.username.charAt(0).toUpperCase()}
+                        </div>
+                        {isUserHost && (
+                          <span className="absolute -top-1.5 -right-1.5 text-xs drop-shadow">👑</span>
                         )}
                       </div>
-                      <span className="font-mono font-bold text-[var(--color-accent)]">{percentage}%</span>
+                      <div>
+                        <div className="text-xs font-black text-white flex items-center gap-1.5">
+                          <span>{participant.username}</span>
+                          {participant.team && (
+                            <span className={`text-[8px] px-1 py-0.2 rounded font-black ${participant.team === 'Red' ? 'bg-rose-600 text-white' : 'bg-cyan-600 text-white'}`}>
+                              {participant.team}
+                            </span>
+                          )}
+                          {isMe && <span className="text-[8px] bg-violet-600 text-white px-1 py-0.2 rounded font-black">SEN</span>}
+                        </div>
+                        <div className="text-[10px] text-slate-400 font-mono">Seviye {participant.level || 1}</div>
+                      </div>
                     </div>
 
-                    {/* Progress Bar Track */}
-                    <div className="w-full bg-[var(--color-surface-light)] rounded-full h-2.5 overflow-hidden">
-                      <div
-                        className={`h-2.5 rounded-full transition-all duration-500 ease-out ${isMe
-                          ? 'bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-accent)]'
-                          : 'bg-gradient-to-r from-emerald-500 to-teal-400'
-                          }`}
-                        style={{ width: `${percentage}%` }}
-                      />
+                    <div>
+                      {isUserHost ? (
+                        <span className="bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] font-black px-2 py-0.5 rounded-lg">
+                          👑 Host
+                        </span>
+                      ) : participant.isReady ? (
+                        <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-[10px] font-black px-2 py-0.5 rounded-lg flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" /> Hazır
+                        </span>
+                      ) : (
+                        <span className="bg-white/5 text-slate-400 border border-white/10 text-[10px] font-semibold px-2 py-0.5 rounded-lg">
+                          Bekliyor
+                        </span>
+                      )}
                     </div>
                   </div>
                 );
               })}
             </div>
-          </div>
 
-          {/* Current Question View */}
-          {currentQuestion ? (
-            <div className="bg-[var(--color-surface)] rounded-3xl p-8 mb-6 border border-[var(--color-surface-light)] shadow-xl">
-              <div className="flex items-center justify-between mb-4">
-                <span className="bg-[var(--color-primary)]/20 text-[var(--color-primary)] text-xs font-bold px-3 py-1 rounded-full">
-                  Soru {currentQuestionIndex + 1} / {totalQuestions}
-                </span>
-                <span className="text-xs text-[var(--color-text-muted)]">{currentQuestion.branch}</span>
-              </div>
-
-              {/* Question Text */}
-              <p className="text-lg text-white font-medium leading-relaxed mb-6 whitespace-pre-wrap">
-                {currentQuestion.questionText}
-              </p>
-
-              {/* Question Image */}
-              {currentQuestion.imageUrl && (
-                <div className="mb-6">
-                  <img src={currentQuestion.imageUrl} alt="Soru görseli" className="max-w-full rounded-xl border border-white/5" />
-                </div>
+            <div className="pt-2 space-y-2">
+              {isHost ? (
+                <button
+                  onClick={handleStartMatch}
+                  className="w-full py-4 rounded-2xl btn-game-gold font-black text-sm uppercase flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <span>⚔️ Savaşı Başlat</span>
+                  <span className="text-xs bg-black/25 px-2 py-0.5 rounded-md font-mono text-white">
+                    {room.users.length} Oyuncu
+                  </span>
+                </button>
+              ) : (
+                <button
+                  onClick={handleToggleReady}
+                  className={`w-full py-4 rounded-2xl font-black text-sm uppercase flex items-center justify-center gap-2 cursor-pointer ${
+                    isReady
+                      ? 'bg-amber-500/20 text-amber-300 border-2 border-amber-500/50'
+                      : 'btn-game-primary text-white'
+                  }`}
+                >
+                  {isReady ? '⚪ Hazır Değilim' : '🟢 Hazırım!'}
+                </button>
               )}
 
-              {/* Choices */}
-              <div className="space-y-3">
-                {Object.entries(currentQuestion.choices).map(([key, text]) => {
-                  const isSelected = answers[currentQuestion.id] === key;
-
-                  return (
-                    <button
-                      key={key}
-                      onClick={() => handleSelectChoice(currentQuestion.id, key)}
-                      className={`w-full text-left px-5 py-4 rounded-2xl border-2 transition-all flex items-center font-medium cursor-pointer ${isSelected
-                        ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/20 text-white shadow-lg shadow-[var(--color-primary)]/10'
-                        : 'border-[var(--color-surface-light)] bg-[var(--color-surface-light)] hover:border-[var(--color-primary)]/40 text-[var(--color-text)]'
-                        }`}
-                    >
-                      <span className={`inline-flex items-center justify-center w-8 h-8 rounded-xl mr-4 text-sm font-bold transition ${isSelected
-                        ? 'bg-[var(--color-primary)] text-white shadow'
-                        : 'bg-[var(--color-bg)] text-[var(--color-text-muted)]'
-                        }`}>
-                        {key}
-                      </span>
-                      <span className="flex-1">{text}</span>
-                    </button>
-                  );
-                })}
-              </div>
+              <button
+                onClick={handleLeaveRoom}
+                className="w-full py-3 rounded-2xl bg-white/5 hover:bg-rose-500/20 text-slate-400 hover:text-rose-300 font-bold text-xs uppercase cursor-pointer"
+              >
+                Lobiden Ayrıl
+              </button>
             </div>
-          ) : (
-            <div className="bg-[var(--color-surface)] rounded-2xl p-12 text-center text-[var(--color-text-muted)]">
-              Soru bulunamadı.
-            </div>
-          )}
 
-          {/* Navigation Controls */}
-          <div className="flex items-center justify-between mb-6">
-            <button
-              onClick={() => handleNavigateQuestion(Math.max(0, currentQuestionIndex - 1))}
-              disabled={currentQuestionIndex === 0}
-              className="px-6 py-3 bg-[var(--color-surface)] rounded-xl text-white disabled:opacity-30 hover:bg-[var(--color-surface-light)] transition font-semibold text-sm cursor-pointer"
-            >
-              ← Önceki
-            </button>
+          </main>
+        )}
 
-            {currentQuestionIndex === totalQuestions - 1 ? (
-              <button
-                onClick={handleSubmitMatch}
-                disabled={submitting}
-                className="px-8 py-3 bg-[var(--color-success)] hover:opacity-90 text-white font-bold rounded-xl shadow-lg shadow-emerald-500/20 transition disabled:opacity-50 cursor-pointer"
-              >
-                {submitting ? 'Gönderiliyor...' : 'Sınavı Bitir ✓'}
-              </button>
-            ) : (
-              <button
-                onClick={() => handleNavigateQuestion(Math.min(totalQuestions - 1, currentQuestionIndex + 1))}
-                className="px-6 py-3 bg-[var(--color-primary)] hover:bg-[var(--color-primary-dark)] text-white font-semibold rounded-xl transition text-sm cursor-pointer"
-              >
-                Sonraki →
-              </button>
-            )}
-          </div>
+        {/* Live In-Game Emote Picker */}
+        <EmotePicker roomCode={room.roomCode} />
 
-          {/* Question Navigator Dots */}
-          <div className="flex flex-wrap gap-2 justify-center">
-            {questions.map((q, idx) => (
-              <button
-                key={q.id}
-                onClick={() => handleNavigateQuestion(idx)}
-                className={`w-9 h-9 rounded-xl text-xs font-bold transition cursor-pointer ${idx === currentQuestionIndex
-                  ? 'bg-[var(--color-primary)] text-white shadow-lg'
-                  : answers[q.id] !== null
-                    ? 'bg-[var(--color-success)]/30 text-[var(--color-success)] border border-[var(--color-success)]/50'
-                    : 'bg-[var(--color-surface)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-light)]'
-                  }`}
-              >
-                {idx + 1}
-              </button>
-            ))}
-          </div>
-        </main>
+        {/* Question Review & Solution Modal */}
+        <QuestionReviewModal
+          isOpen={showReviewModal}
+          onClose={() => setShowReviewModal(false)}
+          answers={answers}
+          fallbackQuestions={questions}
+        />
+
       </div>
-    );
-  }
-
-  // ==========================================
-  // VIEW: LOBBY (DEFAULT)
-  // ==========================================
-  return (
-    <div className="min-h-screen flex flex-col">
-      {/* Toast */}
-      {toastMessage && (
-        <div className="fixed top-6 right-6 z-50 bg-[var(--color-surface-light)] border border-[var(--color-primary)] text-white px-5 py-3 rounded-xl shadow-2xl animate-bounce text-sm flex items-center gap-2">
-          <span>{toastMessage}</span>
-        </div>
-      )}
-
-      {/* Header */}
-      <header className="bg-[var(--color-surface)] border-b border-[var(--color-surface-light)] px-6 py-4">
-        <div className="max-w-6xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <h1
-              onClick={() => navigate('/dashboard')}
-              className="text-2xl font-bold text-[var(--color-primary)] cursor-pointer hover:opacity-80 transition"
-            >
-              duello.lab
-            </h1>
-            <LiveStatusBadge />
-          </div>
-          <div className="flex items-center gap-4">
-            <span className="text-[var(--color-text-muted)]">{user?.username}</span>
-            <button
-              onClick={handleLeaveRoom}
-              className="text-sm text-[var(--color-danger)] hover:underline cursor-pointer"
-            >
-              Lobiden Ayrıl
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Lobby View */}
-      <main className="flex-1 max-w-5xl mx-auto w-full p-6">
-        {/* Top Info Banner */}
-        <div className="bg-[var(--color-surface)] rounded-3xl p-8 mb-8 shadow-xl border border-[var(--color-surface-light)] relative overflow-hidden">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-            <div>
-              <div className="flex items-center gap-3 mb-2">
-                <span className="bg-[var(--color-primary)]/20 text-[var(--color-primary)] text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider">
-                  {room.category}
-                </span>
-                <span className="text-xs text-[var(--color-text-muted)]">
-                  {room.questionCount} Soru • Max {room.maxPlayers} Oyuncu
-                </span>
-              </div>
-              <h2 className="text-3xl font-extrabold text-white">{room.title}</h2>
-              <p className="text-sm text-[var(--color-text-muted)] mt-1">
-                Oda Sahibi: <span className="text-[var(--color-accent)] font-semibold">{room.hostUsername}</span>
-              </p>
-            </div>
-
-            {/* Room Code Card */}
-            <div className="bg-[var(--color-bg)]/80 border-2 border-[var(--color-primary)]/40 rounded-2xl p-4 text-center min-w-[240px]">
-              <div className="text-xs text-[var(--color-text-muted)] mb-1 uppercase tracking-wider font-semibold">
-                Oda Kodu
-              </div>
-              <div className="text-4xl font-mono font-black text-[var(--color-primary)] tracking-widest mb-3">
-                {room.roomCode}
-              </div>
-              <div className="flex items-center gap-2 justify-center">
-                <button
-                  onClick={copyCode}
-                  className="px-3 py-1.5 bg-[var(--color-surface-light)] hover:bg-[var(--color-surface)] text-xs font-medium rounded-lg text-white transition flex items-center gap-1 cursor-pointer"
-                >
-                  {copiedCode ? '✓ Kopyalandı' : '📋 Kodu Kopyala'}
-                </button>
-                <button
-                  onClick={copyInviteLink}
-                  className="px-3 py-1.5 bg-[var(--color-surface-light)] hover:bg-[var(--color-surface)] text-xs font-medium rounded-lg text-white transition flex items-center gap-1 cursor-pointer"
-                >
-                  {copiedLink ? '✓ Kopyalandı' : '🔗 Davet Linki'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Players Section Header */}
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <h3 className="text-xl font-bold text-white">Katılımcılar</h3>
-            <span className="bg-[var(--color-surface-light)] text-xs font-semibold px-2.5 py-1 rounded-full text-[var(--color-text-muted)]">
-              {room.users.length} / {room.maxPlayers}
-            </span>
-          </div>
-          <span className="text-xs text-[var(--color-text-muted)]">
-            ⚡ Sayfa yenilemeye gerek yoktur, liste canlı güncellenir.
-          </span>
-        </div>
-
-        {/* Players Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
-          {room.users.map((participant) => {
-            const isUserHost = participant.userId === room.hostUserId || participant.isHost;
-            const isMe = participant.userId === user?.id;
-
-            return (
-              <div
-                key={participant.userId}
-                className={`bg-[var(--color-surface)] rounded-2xl p-5 border-2 transition-all duration-300 flex items-center justify-between ${isMe
-                  ? 'border-[var(--color-primary)] shadow-lg shadow-[var(--color-primary)]/10'
-                  : 'border-[var(--color-surface-light)]'
-                  }`}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-xl bg-[var(--color-surface-light)] flex items-center justify-center text-xl font-bold text-[var(--color-primary)] border border-white/5 relative">
-                    {participant.username.charAt(0).toUpperCase()}
-                    {isUserHost && (
-                      <span className="absolute -top-2 -right-2 text-sm drop-shadow" title="Oda Sahibi">
-                        👑
-                      </span>
-                    )}
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-white">{participant.username}</span>
-                      {isMe && (
-                        <span className="text-[10px] bg-[var(--color-primary)] text-white px-1.5 py-0.5 rounded font-bold">
-                          SEN
-                        </span>
-                      )}
-                    </div>
-                    <div className="text-xs text-[var(--color-text-muted)] mt-0.5">
-                      Seviye {participant.level || 1}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Ready Status */}
-                <div>
-                  {isUserHost ? (
-                    <span className="bg-amber-500/20 text-amber-400 border border-amber-500/30 text-xs font-semibold px-2.5 py-1 rounded-full flex items-center gap-1">
-                      👑 Host
-                    </span>
-                  ) : participant.isReady ? (
-                    <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-semibold px-2.5 py-1 rounded-full flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Hazır
-                    </span>
-                  ) : (
-                    <span className="bg-white/5 text-[var(--color-text-muted)] border border-white/10 text-xs font-semibold px-2.5 py-1 rounded-full">
-                      Bekliyor...
-                    </span>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Action Controls Bar */}
-        <div className="bg-[var(--color-surface)] rounded-2xl p-6 border border-[var(--color-surface-light)] flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="text-sm text-[var(--color-text-muted)] text-center sm:text-left">
-            {isHost ? (
-              <span>Hazır olan tüm oyuncularla savaşı başlatabilirsiniz.</span>
-            ) : (
-              <span>Oyuna başlamak için hazır durumunuzu güncelleyin.</span>
-            )}
-          </div>
-
-          <div className="flex items-center gap-3 w-full sm:w-auto">
-            {isHost ? (
-              <button
-                onClick={handleStartMatch}
-                className="w-full sm:w-auto px-8 py-3.5 bg-[var(--color-success)] hover:opacity-90 text-white font-bold rounded-xl shadow-lg shadow-emerald-500/20 transition flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <span>⚔️ Savaşı Başlat</span>
-                <span className="text-xs bg-white/20 px-2 py-0.5 rounded-full font-mono">
-                  {room.users.length} Oyuncu
-                </span>
-              </button>
-            ) : (
-              <button
-                onClick={handleToggleReady}
-                className={`w-full sm:w-auto px-8 py-3.5 font-bold rounded-xl shadow-lg transition flex items-center justify-center gap-2 cursor-pointer ${isReady
-                  ? 'bg-amber-500/20 text-amber-400 border border-amber-500/50 hover:bg-amber-500/30'
-                  : 'bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-dark)] shadow-[var(--color-primary)]/20'
-                  }`}
-              >
-                {isReady ? '⚪ Hazır Değilim' : '🟢 Hazırım!'}
-              </button>
-            )}
-
-            <button
-              onClick={handleLeaveRoom}
-              className="w-full sm:w-auto px-5 py-3.5 bg-[var(--color-surface-light)] hover:bg-[var(--color-danger)]/20 hover:text-[var(--color-danger)] text-[var(--color-text-muted)] font-semibold rounded-xl transition cursor-pointer"
-            >
-              Ayrıl
-            </button>
-          </div>
-        </div>
-      </main>
     </div>
   );
 }

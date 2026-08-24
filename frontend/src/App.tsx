@@ -7,6 +7,9 @@ import DashboardPage from './pages/DashboardPage';
 import ExamPage from './pages/ExamPage';
 import ResultPage from './pages/ResultPage';
 import LobbyPage from './pages/LobbyPage';
+import ShopPage from './pages/ShopPage';
+import ClanPage from './pages/ClanPage';
+import GlobalDuelInviteModal from './components/GlobalDuelInviteModal';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { token, isLoading } = useAuth();
@@ -32,6 +35,8 @@ function AppRoutes() {
       <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
       <Route path="/register" element={<PublicRoute><RegisterPage /></PublicRoute>} />
       <Route path="/dashboard" element={<PrivateRoute><DashboardPage /></PrivateRoute>} />
+      <Route path="/shop" element={<PrivateRoute><ShopPage /></PrivateRoute>} />
+      <Route path="/clan" element={<PrivateRoute><ClanPage /></PrivateRoute>} />
       <Route path="/exam/:examId" element={<PrivateRoute><ExamPage /></PrivateRoute>} />
       <Route path="/lobby/:roomCode" element={<PrivateRoute><LobbyPage /></PrivateRoute>} />
       <Route path="/results/:resultId" element={<PrivateRoute><ResultPage /></PrivateRoute>} />
@@ -46,6 +51,7 @@ export default function App() {
       <AuthProvider>
         <SignalRProvider>
           <AppRoutes />
+          <GlobalDuelInviteModal />
         </SignalRProvider>
       </AuthProvider>
     </BrowserRouter>

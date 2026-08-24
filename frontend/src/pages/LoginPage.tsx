@@ -6,6 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 export default function LoginPage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { setAuth } = useAuth();
@@ -20,58 +21,104 @@ export default function LoginPage() {
       setAuth(data.token, data.user);
       navigate('/dashboard');
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Login failed');
+      setError(err.response?.data?.error || 'Giriş yapılamadı. Bilgilerinizi kontrol edin.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4">
-      <div className="w-full max-w-md">
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-[var(--color-primary)] mb-2">duello.lab</h1>
-          <p className="text-[var(--color-text-muted)]">Sınav Arenasına Hoş Geldin</p>
+    <div className="min-h-screen bg-[#060710] flex justify-center items-center p-0 sm:p-4">
+      <div className="w-full max-w-md mobile-app-shell flex flex-col justify-between p-6 sm:rounded-3xl relative overflow-hidden">
+        
+        {/* Top Logo & App Title */}
+        <div className="text-center pt-8 space-y-3">
+          <div className="w-16 h-16 mx-auto rounded-3xl bg-gradient-to-tr from-violet-600 via-purple-600 to-cyan-400 p-0.5 shadow-2xl animate-bounce-subtle">
+            <div className="w-full h-full bg-[#0d0f22] rounded-[22px] flex items-center justify-center text-3xl">
+              ⚔️
+            </div>
+          </div>
+
+          <div>
+            <h1 className="text-2xl font-black text-white tracking-tight font-mono">
+              duello<span className="text-cyan-400">.lab</span>
+            </h1>
+            <span className="text-[11px] font-bold text-violet-300 uppercase tracking-widest bg-violet-500/15 border border-violet-500/30 px-3 py-0.5 rounded-full inline-block mt-1">
+              YKS Mobil Düello Arenası
+            </span>
+          </div>
         </div>
-        <form onSubmit={handleSubmit} className="bg-[var(--color-surface)] rounded-2xl p-8 shadow-xl">
-          <h2 className="text-2xl font-semibold mb-6">Giriş Yap</h2>
+
+        {/* Auth Form Card */}
+        <div className="game-card-3d p-6 my-6 space-y-4">
+          <h2 className="text-lg font-black text-white text-center uppercase tracking-wide">
+            Arenaya Giriş Yap
+          </h2>
+
           {error && (
-            <div className="bg-[var(--color-danger)]/20 border border-[var(--color-danger)] text-[var(--color-danger)] rounded-lg p-3 mb-4 text-sm">
+            <div className="bg-rose-500/20 border border-rose-500 text-rose-300 text-xs font-bold rounded-xl p-2.5 text-center">
               {error}
             </div>
           )}
-          <div className="mb-4">
-            <label className="block text-sm text-[var(--color-text-muted)] mb-1">Kullanıcı Adı</label>
-            <input
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              className="w-full bg-[var(--color-surface-light)] border border-[var(--color-surface-light)] rounded-lg px-4 py-3 text-[var(--color-text)] focus:outline-none focus:border-[var(--color-primary)] transition"
-              required
-            />
-          </div>
-          <div className="mb-6">
-            <label className="block text-sm text-[var(--color-text-muted)] mb-1">Şifre</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full bg-[var(--color-surface-light)] border border-[var(--color-surface-light)] rounded-lg px-4 py-3 text-[var(--color-text)] focus:outline-none focus:border-[var(--color-primary)] transition"
-              required
-            />
-          </div>
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-[var(--color-primary)] hover:bg-[var(--color-primary-dark)] text-white font-semibold py-3 rounded-lg transition disabled:opacity-50"
-          >
-            {loading ? 'Giriş yapılıyor...' : 'Giriş Yap'}
-          </button>
-          <p className="text-center text-[var(--color-text-muted)] mt-4 text-sm">
+
+          <form onSubmit={handleSubmit} className="space-y-3.5">
+            <div>
+              <label className="block text-[10px] font-black text-slate-300 mb-1 uppercase tracking-wider">
+                Kullanıcı Adı
+              </label>
+              <input
+                type="text"
+                placeholder="örn: duello_ustasi"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                className="w-full bg-[#10132b] border border-white/10 rounded-xl px-3.5 py-3 text-white text-xs font-bold focus:outline-none focus:border-violet-500 transition"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-black text-slate-300 mb-1 uppercase tracking-wider">
+                Şifre
+              </label>
+              <div className="relative">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full bg-[#10132b] border border-white/10 rounded-xl px-3.5 py-3 text-white text-xs font-bold focus:outline-none focus:border-violet-500 transition pr-10"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-bold"
+                >
+                  {showPassword ? '🙈' : '👁️'}
+                </button>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full py-4 rounded-2xl btn-game-primary text-white font-black text-sm uppercase tracking-wider cursor-pointer disabled:opacity-50 mt-2"
+            >
+              {loading ? 'Giriş Yapılıyor...' : 'Arenaya Gir ➔'}
+            </button>
+          </form>
+        </div>
+
+        {/* Footer Link */}
+        <div className="text-center pb-4">
+          <p className="text-xs text-slate-400 font-bold">
             Hesabın yok mu?{' '}
-            <Link to="/register" className="text-[var(--color-primary)] hover:underline">Kayıt Ol</Link>
+            <Link to="/register" className="text-amber-400 hover:underline">
+              Kayıt Ol (+100 💰)
+            </Link>
           </p>
-        </form>
+        </div>
+
       </div>
     </div>
   );

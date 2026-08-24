@@ -2786,11 +2786,11 @@
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "C:\\Users\\simse\\Masaüstü\\duello.lab\\backend\\DuelloLab.Api\\DuelloLab.Api.csproj",
+      "projectUniqueName": "C:\\Users\\simse\\Masaüstü\\duello.lab\\duello.lab\\backend\\DuelloLab.Api\\DuelloLab.Api.csproj",
       "projectName": "DuelloLab.Api",
-      "projectPath": "C:\\Users\\simse\\Masaüstü\\duello.lab\\backend\\DuelloLab.Api\\DuelloLab.Api.csproj",
+      "projectPath": "C:\\Users\\simse\\Masaüstü\\duello.lab\\duello.lab\\backend\\DuelloLab.Api\\DuelloLab.Api.csproj",
       "packagesPath": "C:\\Users\\simse\\.nuget\\packages\\",
-      "outputPath": "C:\\Users\\simse\\Masaüstü\\duello.lab\\backend\\DuelloLab.Api\\obj\\",
+      "outputPath": "C:\\Users\\simse\\Masaüstü\\duello.lab\\duello.lab\\backend\\DuelloLab.Api\\obj\\",
       "projectStyle": "PackageReference",
       "fallbackFolders": [
         "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"

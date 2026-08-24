@@ -5,6 +5,7 @@ using DuelloLab.Api.Hubs;
 using DuelloLab.Api.Middleware;
 using DuelloLab.Api.Services;
 using DuelloLab.Api.Services.Realtime;
+using DuelloLab.Api.Services.Social;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -92,6 +93,15 @@ builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IExamService, ExamService>();
 builder.Services.AddScoped<IRoomService, RoomService>();
+builder.Services.AddScoped<IBattlegroundService, BattlegroundService>();
+builder.Services.AddScoped<IClanService, ClanService>();
+builder.Services.AddScoped<IFriendService, FriendService>();
+builder.Services.AddScoped<DuelloLab.Api.Services.Analytics.IAnalyticsService, DuelloLab.Api.Services.Analytics.AnalyticsService>();
+
+// Matchmaking Engine Singleton & Hosted Service
+builder.Services.AddSingleton<MatchmakingService>();
+builder.Services.AddSingleton<IMatchmakingService>(sp => sp.GetRequiredService<MatchmakingService>());
+builder.Services.AddHostedService(sp => sp.GetRequiredService<MatchmakingService>());
 
 // Controllers + JSON
 builder.Services.AddControllers()
@@ -138,6 +148,46 @@ if (app.Environment.IsDevelopment())
 
     var db = scope.ServiceProvider
         .GetRequiredService<AppDbContext>();
+
+    // Ensure Clans, ClanMembers, Friendships tables exist
+    await db.Database.ExecuteSqlRawAsync(@"
+        CREATE TABLE IF NOT EXISTS ""Clans"" (
+            ""Id"" uuid PRIMARY KEY,
+            ""Name"" varchar(50) NOT NULL UNIQUE,
+            ""Description"" varchar(200) NOT NULL DEFAULT '',
+            ""Tag"" varchar(6) NOT NULL DEFAULT 'YKS',
+            ""BadgeIcon"" varchar(10) NOT NULL DEFAULT '🛡️',
+            ""MinLevel"" integer NOT NULL DEFAULT 1,
+            ""IsOpen"" boolean NOT NULL DEFAULT true,
+            ""LeaderUserId"" uuid NOT NULL,
+            ""LeaderUsername"" varchar(50) NOT NULL DEFAULT '',
+            ""TotalXp"" integer NOT NULL DEFAULT 0,
+            ""MemberCount"" integer NOT NULL DEFAULT 1,
+            ""CreatedAt"" timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS ""ClanMembers"" (
+            ""Id"" uuid PRIMARY KEY,
+            ""ClanId"" uuid NOT NULL REFERENCES ""Clans""(""Id"") ON DELETE CASCADE,
+            ""UserId"" uuid NOT NULL REFERENCES ""Users""(""Id"") ON DELETE CASCADE,
+            ""Username"" varchar(50) NOT NULL DEFAULT '',
+            ""Level"" integer NOT NULL DEFAULT 1,
+            ""XpContributed"" integer NOT NULL DEFAULT 0,
+            ""Role"" integer NOT NULL DEFAULT 0,
+            ""JoinedAt"" timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            CONSTRAINT ""UQ_ClanMember"" UNIQUE (""ClanId"", ""UserId"")
+        );
+
+        CREATE TABLE IF NOT EXISTS ""Friendships"" (
+            ""Id"" uuid PRIMARY KEY,
+            ""RequesterId"" uuid NOT NULL REFERENCES ""Users""(""Id"") ON DELETE CASCADE,
+            ""AddresseeId"" uuid NOT NULL REFERENCES ""Users""(""Id"") ON DELETE CASCADE,
+            ""Status"" integer NOT NULL DEFAULT 0,
+            ""CreatedAt"" timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            ""UpdatedAt"" timestamptz NULL,
+            CONSTRAINT ""UQ_Friendship"" UNIQUE (""RequesterId"", ""AddresseeId"")
+        );
+    ");
 
     await ExamSeeder.SeedAsync(
         db,

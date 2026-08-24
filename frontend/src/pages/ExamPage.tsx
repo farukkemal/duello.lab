@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getSoloExam, submitExam, type SoloExam, type SoloQuestion } from '../api/exams';
+import MobileTopHUD from '../components/MobileTopHUD';
 
 export default function ExamPage() {
   const { examId } = useParams<{ examId: string }>();
@@ -18,12 +19,10 @@ export default function ExamPage() {
     getSoloExam(examId)
       .then(({ data }) => {
         setExam(data);
-        // Initialize all answers as null (blank)
         const initial: Record<string, string | null> = {};
         data.questions.forEach(q => { initial[q.id] = null; });
         setAnswers(initial);
         setLoading(false);
-        // Start client-side timer (display only, server handles actual timing)
         timerRef.current = setInterval(() => setElapsed(prev => prev + 1), 1000);
       })
       .catch(() => navigate('/dashboard'));
@@ -31,12 +30,43 @@ export default function ExamPage() {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [examId]);
+  }, [examId, navigate]);
+
+  useEffect(() => {
+    if (!exam || !exam.questions[currentIndex]) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const key = e.key.toUpperCase();
+      const currentQ = exam.questions[currentIndex];
+      if (!currentQ) return;
+
+      const choiceKeys = Object.keys(currentQ.choices);
+      let selectedKey: string | null = null;
+
+      if (choiceKeys.includes(key)) {
+        selectedKey = key;
+      } else if (['1', '2', '3', '4', '5'].includes(key)) {
+        const num = parseInt(key, 10) - 1;
+        if (num < choiceKeys.length) selectedKey = choiceKeys[num];
+      }
+
+      if (selectedKey) {
+        handleAnswer(currentQ.id, selectedKey);
+      } else if (e.key === 'ArrowRight' && currentIndex < exam.questions.length - 1) {
+        setCurrentIndex(prev => prev + 1);
+      } else if (e.key === 'ArrowLeft' && currentIndex > 0) {
+        setCurrentIndex(prev => prev - 1);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [exam, currentIndex, answers]);
 
   const handleAnswer = (questionId: string, choice: string) => {
     setAnswers(prev => ({
       ...prev,
-      [questionId]: prev[questionId] === choice ? null : choice // Toggle
+      [questionId]: prev[questionId] === choice ? null : choice
     }));
   };
 
@@ -66,8 +96,11 @@ export default function ExamPage() {
 
   if (loading || !exam) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-[var(--color-text-muted)] text-lg">Sınav yükleniyor...</div>
+      <div className="min-h-screen bg-[#060710] flex justify-center items-center">
+        <div className="w-full max-w-md mobile-app-shell flex flex-col items-center justify-center p-6">
+          <div className="w-12 h-12 border-3 border-violet-500 border-t-transparent rounded-full animate-spin mb-4" />
+          <div className="text-white font-black text-sm">Sınav Yükleniyor...</div>
+        </div>
       </div>
     );
   }
@@ -77,120 +110,101 @@ export default function ExamPage() {
   const answeredCount = Object.values(answers).filter(a => a !== null).length;
 
   return (
-    <div className="min-h-screen flex flex-col">
-      {/* Top Bar */}
-      <header className="bg-[var(--color-surface)] border-b border-[var(--color-surface-light)] px-6 py-3">
-        <div className="max-w-4xl mx-auto flex items-center justify-between">
+    <div className="min-h-screen bg-[#060710] flex justify-center">
+      <div className="w-full max-w-md mobile-app-shell flex flex-col justify-between relative overflow-hidden">
+        
+        {/* Mobile Top HUD */}
+        <MobileTopHUD />
+
+        {/* Exam HUD */}
+        <div className="bg-[#10132b] px-3.5 py-2.5 border-b border-white/10 flex items-center justify-between">
           <div>
-            <h1 className="text-lg font-semibold text-[var(--color-primary)]">{exam.title}</h1>
-            <span className="text-xs text-[var(--color-text-muted)]">{exam.category}</span>
+            <div className="text-xs font-black text-white truncate max-w-[170px]">{exam.title}</div>
+            <div className="text-[10px] text-slate-400 font-mono">Soru {currentIndex + 1}/{totalQuestions}</div>
           </div>
-          <div className="flex items-center gap-6">
-            <div className="text-center">
-              <div className="text-2xl font-mono font-bold text-[var(--color-accent)]">{formatTime(elapsed)}</div>
-              <div className="text-xs text-[var(--color-text-muted)]">Süre</div>
+
+          <div className="flex items-center gap-3">
+            <div className="bg-black/30 px-2.5 py-1 rounded-xl text-center border border-white/5">
+              <span className="font-mono font-black text-cyan-400 text-xs">⏱️ {formatTime(elapsed)}</span>
             </div>
-            <div className="text-center">
-              <div className="text-lg font-semibold">{answeredCount}/{totalQuestions}</div>
-              <div className="text-xs text-[var(--color-text-muted)]">Cevaplanan</div>
+            <div className="text-[10px] font-bold text-slate-300 font-mono">
+              {answeredCount}/{totalQuestions} Çözüldü
             </div>
           </div>
         </div>
-      </header>
 
-      {/* Question Area */}
-      <main className="flex-1 max-w-4xl mx-auto w-full p-6">
-        <div className="bg-[var(--color-surface)] rounded-2xl p-8 mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <span className="bg-[var(--color-primary)]/20 text-[var(--color-primary)] text-sm font-semibold px-3 py-1 rounded-full">
-              Soru {currentIndex + 1} / {totalQuestions}
-            </span>
-            <span className="text-[var(--color-text-muted)] text-sm">{question.branch}</span>
-          </div>
+        {/* Question Container */}
+        <main className="flex-1 p-3.5 flex flex-col justify-between overflow-y-auto no-scrollbar space-y-3">
+          <div className="game-card-3d p-4 flex-1 flex flex-col justify-between overflow-y-auto no-scrollbar">
+            <div>
+              <div className="inline-block px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase bg-violet-500/20 text-violet-300 border border-violet-500/30 mb-2">
+                {question.branch}
+              </div>
+              <p className="text-sm font-semibold text-slate-100 leading-relaxed whitespace-pre-wrap">
+                {question.questionText}
+              </p>
 
-          {/* Question Text */}
-          <p className="text-lg leading-relaxed mb-6 whitespace-pre-wrap">{question.questionText}</p>
-
-          {/* Question Image */}
-          {question.imageUrl && (
-            <div className="mb-6">
-              <img src={question.imageUrl} alt="Question" className="max-w-full rounded-lg" />
+              {question.imageUrl && (
+                <div className="mt-2 mb-2">
+                  <img src={question.imageUrl} alt="Soru" className="max-w-full rounded-xl border border-white/10" />
+                </div>
+              )}
             </div>
-          )}
 
-          {/* Choices */}
-          <div className="space-y-3">
-            {Object.entries(question.choices).map(([key, value]) => {
-              const isSelected = answers[question.id] === key;
-              return (
-                <button
-                  key={key}
-                  onClick={() => handleAnswer(question.id, key)}
-                  className={`w-full text-left px-5 py-4 rounded-xl border-2 transition font-medium ${
-                    isSelected
-                      ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/15 text-[var(--color-primary)]'
-                      : 'border-[var(--color-surface-light)] bg-[var(--color-surface-light)] hover:border-[var(--color-primary)]/50 text-[var(--color-text)]'
-                  }`}
-                >
-                  <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full mr-3 text-sm font-bold ${
-                    isSelected ? 'bg-[var(--color-primary)] text-white' : 'bg-[var(--color-bg)] text-[var(--color-text-muted)]'
-                  }`}>
-                    {key}
-                  </span>
-                  {value}
-                </button>
-              );
-            })}
+            {/* Chunky Choices */}
+            <div className="space-y-2 pt-3">
+              {Object.entries(question.choices).map(([key, value]) => {
+                const isSelected = answers[question.id] === key;
+                return (
+                  <button
+                    key={key}
+                    onClick={() => handleAnswer(question.id, key)}
+                    className={`w-full text-left p-3 rounded-2xl flex items-center font-bold text-xs cursor-pointer select-none ${
+                      isSelected ? 'btn-game-choice selected' : 'btn-game-choice text-slate-200'
+                    }`}
+                  >
+                    <span className={`w-7 h-7 rounded-xl flex items-center justify-center mr-3 text-xs font-black font-mono ${
+                      isSelected ? 'bg-white text-purple-900 shadow' : 'bg-black/30 text-slate-400'
+                    }`}>
+                      {key}
+                    </span>
+                    <span className="flex-1">{value}</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
-        </div>
 
-        {/* Navigation */}
-        <div className="flex items-center justify-between">
-          <button
-            onClick={() => setCurrentIndex(Math.max(0, currentIndex - 1))}
-            disabled={currentIndex === 0}
-            className="px-6 py-3 bg-[var(--color-surface)] rounded-lg text-[var(--color-text)] disabled:opacity-30 hover:bg-[var(--color-surface-light)] transition"
-          >
-            ← Önceki
-          </button>
+          {/* Bottom Action Controls */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setCurrentIndex(Math.max(0, currentIndex - 1))}
+              disabled={currentIndex === 0}
+              className="w-1/3 py-3.5 rounded-2xl bg-[#171b38] border border-white/10 text-white font-black text-xs uppercase disabled:opacity-30 cursor-pointer active:scale-95"
+            >
+              ← Geri
+            </button>
 
-          {currentIndex === totalQuestions - 1 ? (
-            <button
-              onClick={handleSubmit}
-              disabled={submitting}
-              className="px-8 py-3 bg-[var(--color-success)] hover:opacity-90 text-white font-semibold rounded-lg transition disabled:opacity-50"
-            >
-              {submitting ? 'Gönderiliyor...' : 'Sınavı Bitir ✓'}
-            </button>
-          ) : (
-            <button
-              onClick={() => setCurrentIndex(Math.min(totalQuestions - 1, currentIndex + 1))}
-              className="px-6 py-3 bg-[var(--color-primary)] hover:bg-[var(--color-primary-dark)] text-white rounded-lg transition"
-            >
-              Sonraki →
-            </button>
-          )}
-        </div>
+            {currentIndex === totalQuestions - 1 ? (
+              <button
+                onClick={handleSubmit}
+                disabled={submitting}
+                className="flex-1 py-3.5 rounded-2xl btn-game-success text-white font-black text-xs uppercase cursor-pointer disabled:opacity-50"
+              >
+                {submitting ? 'Gönderiliyor...' : 'Sınavı Bitir ✓'}
+              </button>
+            ) : (
+              <button
+                onClick={() => setCurrentIndex(Math.min(totalQuestions - 1, currentIndex + 1))}
+                className="flex-1 py-3.5 rounded-2xl btn-game-primary text-white font-black text-xs uppercase cursor-pointer"
+              >
+                İleri ➔
+              </button>
+            )}
+          </div>
+        </main>
 
-        {/* Question Navigator Dots */}
-        <div className="mt-6 flex flex-wrap gap-2 justify-center">
-          {exam.questions.map((q, i) => (
-            <button
-              key={q.id}
-              onClick={() => setCurrentIndex(i)}
-              className={`w-9 h-9 rounded-lg text-sm font-medium transition ${
-                i === currentIndex
-                  ? 'bg-[var(--color-primary)] text-white'
-                  : answers[q.id] !== null
-                    ? 'bg-[var(--color-success)]/30 text-[var(--color-success)] border border-[var(--color-success)]/50'
-                    : 'bg-[var(--color-surface)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-light)]'
-              }`}
-            >
-              {i + 1}
-            </button>
-          ))}
-        </div>
-      </main>
+      </div>
     </div>
   );
 }

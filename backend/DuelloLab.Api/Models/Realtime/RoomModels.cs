@@ -2,6 +2,15 @@ using DuelloLab.Api.DTOs.Exam;
 
 namespace DuelloLab.Api.Models.Realtime;
 
+public enum GameMode
+{
+    CustomRoom = 0,
+    Ranked1v1 = 1,
+    Battleground100 = 2,
+    SuddenDeath = 3,
+    Squad2v2 = 4
+}
+
 public class RoomUserInfo
 {
     public string UserId { get; set; } = string.Empty;
@@ -13,7 +22,15 @@ public class RoomUserInfo
     public bool IsReady { get; set; } = false;
     public decimal Score { get; set; } = 0;
 
-    // Gameplay Progress & Results (FAZ 2.3 & 2.4)
+    // Team Battle (Squad 2v2)
+    public string Team { get; set; } = "Red"; // "Red" | "Blue"
+
+    // Battleground & Sudden Death Elimination
+    public bool IsEliminated { get; set; } = false;
+    public int EliminatedAtQuestion { get; set; } = 0;
+    public string EliminationReason { get; set; } = string.Empty;
+
+    // Gameplay Progress & Results
     public int CurrentQuestionIndex { get; set; } = 0;
     public int AnsweredCount { get; set; } = 0;
     public int ProgressPercentage { get; set; } = 0;
@@ -44,6 +61,7 @@ public class RoomState
     public string Title { get; set; } = string.Empty;
     public Guid? ExamId { get; set; }
     public string Category { get; set; } = "TYT";
+    public GameMode Mode { get; set; } = GameMode.CustomRoom;
     public string HostUserId { get; set; } = string.Empty;
     public string HostUsername { get; set; } = string.Empty;
     public int QuestionCount { get; set; } = 5;
@@ -55,6 +73,11 @@ public class RoomState
     public DateTime? StartTime { get; set; }
     public int DurationSeconds { get; set; } = 300;
     public Dictionary<string, RoomUserInfo> Users { get; set; } = new();
+
+    // Battleground Zone Dynamics
+    public int CurrentZoneRound { get; set; } = 1;
+    public int SafeZonePlayersRemaining { get; set; } = 100;
+    public int TotalEliminatedCount { get; set; } = 0;
 }
 
 public class OnlineStatsDto
@@ -62,6 +85,7 @@ public class OnlineStatsDto
     public int ConnectedClientsCount { get; set; }
     public int OnlineUsersCount { get; set; }
     public int ActiveRoomsCount { get; set; }
+    public int InQueuePlayersCount { get; set; }
     public bool IsRedisActive { get; set; }
     public DateTime ServerTime { get; set; } = DateTime.UtcNow;
 }
