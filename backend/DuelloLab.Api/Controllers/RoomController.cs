@@ -13,11 +13,13 @@ public class RoomController : ControllerBase
 {
     private readonly IRoomService _roomService;
     private readonly IBattlegroundService _battlegroundService;
+    private readonly IBotService _botService;
 
-    public RoomController(IRoomService roomService, IBattlegroundService battlegroundService)
+    public RoomController(IRoomService roomService, IBattlegroundService battlegroundService, IBotService botService)
     {
         _roomService = roomService;
         _battlegroundService = battlegroundService;
+        _botService = botService;
     }
 
     private Guid GetUserId() => Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier)!.Value);
@@ -42,6 +44,25 @@ public class RoomController : ControllerBase
         return Ok(result);
     }
 
+    [HttpPost("bot-room")]
+    public async Task<ActionResult<object>> CreateBotRoom([FromBody] CreateBotRoomDto dto)
+    {
+        if (dto.BotDifficulties == null || dto.BotDifficulties.Count == 0)
+            return BadRequest(new { error = "En az 1 bot ekleyin." });
+        if (dto.BotDifficulties.Count > 4)
+            return BadRequest(new { error = "En fazla 4 bot ekleyebilirsiniz." });
+
+        var roomCode = await _botService.CreateBotRoomAsync(GetUserId(), GetUsername(), new CreateBotRoomRequest
+        {
+            Category       = dto.Category,
+            QuestionCount  = dto.QuestionCount,
+            BotDifficulties = dto.BotDifficulties
+        });
+
+        var room = await _roomService.GetRoomByCodeAsync(roomCode);
+        return Ok(room);
+    }
+
     [HttpGet("{roomCode}")]
     public async Task<ActionResult<RoomResponseDto>> GetRoom(string roomCode)
     {
@@ -58,3 +79,4 @@ public class RoomController : ControllerBase
         return Ok(result);
     }
 }
+

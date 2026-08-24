@@ -45,6 +45,10 @@ public class RoomUserInfo
     public int CoinsGained { get; set; } = 0;
     public int Rank { get; set; } = 0;
     public Dictionary<Guid, string?> UserAnswers { get; set; } = new();
+
+    // Bot Properties
+    public bool IsBot { get; set; } = false;
+    public string BotDifficulty { get; set; } = string.Empty; // "berkay"|"selin"|"emre"|"nur"|"esma"
 }
 
 public enum RoomStatus

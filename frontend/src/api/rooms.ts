@@ -38,7 +38,10 @@ export interface RoomUserInfo {
   xpGained?: number;
   coinsGained?: number;
   rank?: number;
+  isBot?: boolean;
+  botDifficulty?: string;
 }
+
 
 export interface RoomState {
   roomCode: string;
@@ -153,3 +156,13 @@ export const joinRoom = (roomCode: string) =>
 
 export const claimCoins = () =>
   api.post('/auth/claim-coins');
+
+export interface CreateBotRoomRequest {
+  category: string;
+  questionCount: number;
+  botDifficulties: string[]; // ["berkay", "emre", "nur"] gibi — 1-4 arası
+}
+
+export const createBotRoom = (data: CreateBotRoomRequest) =>
+  api.post<RoomState>('/rooms/bot-room', data);
+

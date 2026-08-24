@@ -103,6 +103,10 @@ builder.Services.AddSingleton<MatchmakingService>();
 builder.Services.AddSingleton<IMatchmakingService>(sp => sp.GetRequiredService<MatchmakingService>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<MatchmakingService>());
 
+// Bot Match Service
+builder.Services.AddSingleton<IBotService, BotService>();
+
+
 // Controllers + JSON
 builder.Services.AddControllers()
     .AddJsonOptions(options =>

@@ -15,6 +15,7 @@ public class DuelloHub : Hub
     private readonly IRoomService _roomService;
     private readonly IMatchmakingService _matchmakingService;
     private readonly IBattlegroundService _battlegroundService;
+    private readonly IBotService _botService;
     private readonly ILogger<DuelloHub> _logger;
 
     public DuelloHub(
@@ -22,14 +23,17 @@ public class DuelloHub : Hub
         IRoomService roomService,
         IMatchmakingService matchmakingService,
         IBattlegroundService battlegroundService,
+        IBotService botService,
         ILogger<DuelloHub> logger)
     {
         _roomStateService = roomStateService;
         _roomService = roomService;
         _matchmakingService = matchmakingService;
         _battlegroundService = battlegroundService;
+        _botService = botService;
         _logger = logger;
     }
+
 
     private Guid GetUserId() => Guid.Parse(Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? Guid.Empty.ToString());
 
@@ -447,6 +451,29 @@ public class DuelloHub : Hub
 
             // Broadcast MatchStarting with 3-2-1 countdown timestamp to all participants
             await Clients.Group(code).SendAsync("MatchStarting", matchStarting);
+
+            // Bot simülasyonu — odada bot varsa başlat
+            var updatedRoom = await _roomStateService.GetRoomAsync(code);
+            if (updatedRoom != null)
+            {
+                var botConfigs = updatedRoom.Users.Values
+                    .Where(u => u.IsBot)
+                    .Select(u => BotDifficultyConfig.Get(u.BotDifficulty))
+                    .Select((cfg, _) =>
+                    {
+                        // BotId'yi gerçek room user'daki userId ile eşitle
+                        var roomBot = updatedRoom.Users.Values.FirstOrDefault(u => u.IsBot && u.BotDifficulty == cfg.Difficulty);
+                        if (roomBot != null) cfg.BotId = roomBot.UserId;
+                        return cfg;
+                    })
+                    .ToList();
+
+                if (botConfigs.Count > 0)
+                {
+                    _ = _botService.SimulateBotMatchAsync(code, botConfigs);
+                    _logger.LogInformation("🤖 Bot simülasyonu başlatıldı: {Count} bot | Oda: {Code}", botConfigs.Count, code);
+                }
+            }
         }
         catch (Exception ex)
         {
@@ -454,6 +481,7 @@ public class DuelloHub : Hub
             await Clients.Caller.SendAsync("LobbyError", ex.Message);
         }
     }
+
 
     public async Task UpdateProgress(
         string roomCode,

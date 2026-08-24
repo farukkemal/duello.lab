@@ -810,7 +810,7 @@ export default function LobbyPage() {
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-violet-600 to-cyan-400 p-[1.5px] relative">
                         <div className="w-full h-full bg-[#0d0f22] rounded-[10px] flex items-center justify-center font-black text-white text-sm font-mono">
-                          {participant.username.charAt(0).toUpperCase()}
+                          {participant.isBot ? '🤖' : participant.username.charAt(0).toUpperCase()}
                         </div>
                         {isUserHost && (
                           <span className="absolute -top-1.5 -right-1.5 text-xs drop-shadow">👑</span>
@@ -825,6 +825,9 @@ export default function LobbyPage() {
                             </span>
                           )}
                           {isMe && <span className="text-[8px] bg-violet-600 text-white px-1 py-0.2 rounded font-black">SEN</span>}
+                          {participant.isBot && (
+                            <span className="text-[8px] bg-slate-600/80 text-slate-200 border border-slate-500/40 px-1 py-0.2 rounded font-black">🤖 BOT</span>
+                          )}
                         </div>
                         <div className="text-[10px] text-slate-400 font-mono">Seviye {participant.level || 1}</div>
                       </div>

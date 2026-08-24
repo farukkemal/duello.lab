@@ -8,6 +8,8 @@ import MobileTopHUD from '../components/MobileTopHUD';
 import MobileBottomNav, { type MobileTab } from '../components/MobileBottomNav';
 import MatchmakingModal from '../components/MatchmakingModal';
 import AiCoachReportModal from '../components/AiCoachReportModal';
+import BotMatchModal from '../components/BotMatchModal';
+
 
 export default function DashboardPage() {
   const { user, logout, refreshUser } = useAuth();
@@ -34,6 +36,8 @@ export default function DashboardPage() {
   // Matchmaking Modal state
   const [matchmakingMode, setMatchmakingMode] = useState<GameMode | null>(null);
   const [showAiCoach, setShowAiCoach] = useState(false);
+  const [showBotModal, setShowBotModal] = useState(false);
+
 
   // Modals state
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -328,7 +332,46 @@ export default function DashboardPage() {
                   <span>Kodu Gir ve Katıl</span>
                 </button>
               </div>
+
+              {/* Botlarla Kendini Geliştir */}
+              <div className="game-card-3d p-4 space-y-3 relative overflow-hidden">
+                <div className="absolute top-2 right-2 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[9px] font-black px-2 py-0.5 rounded-full uppercase">
+                  ÜCRETSİZ
+                </div>
+                <div className="flex items-center gap-2 text-violet-300 font-black text-sm">
+                  <span>🤖</span> <span>Botlarla Kendini Geliştir</span>
+                </div>
+                <p className="text-xs text-slate-300">
+                  YKS sıralamasına göre bot rakipler seç — kendi hızında antrenman yap!
+                </p>
+                {/* Mini bot previews */}
+                <div className="flex gap-1.5 flex-wrap">
+                  {[
+                    { emoji: '🐢', name: 'Berkay', sub: '1M\'inci', color: 'bg-slate-700/60' },
+                    { emoji: '🌱', name: 'Selin',  sub: '500K\'ıncı', color: 'bg-emerald-900/60' },
+                    { emoji: '⚡', name: 'Emre',   sub: '100K\'ıncı', color: 'bg-cyan-900/60' },
+                    { emoji: '🔥', name: 'Nur',    sub: '50K\'ıncı', color: 'bg-orange-900/60' },
+                    { emoji: '💎', name: 'Esma',   sub: '100\'üncü', color: 'bg-violet-900/60' },
+                  ].map(b => (
+                    <div key={b.name} className={`${b.color} rounded-xl px-2 py-1 flex items-center gap-1 border border-white/10`}>
+                      <span className="text-sm">{b.emoji}</span>
+                      <div>
+                        <div className="text-[9px] font-black text-white">{b.name}</div>
+                        <div className="text-[8px] text-slate-400 font-mono">{b.sub}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <button
+                  onClick={() => setShowBotModal(true)}
+                  className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-violet-600 to-cyan-500 font-black text-sm uppercase text-white shadow-xl cursor-pointer active:scale-95 transition-transform flex items-center justify-center gap-2"
+                >
+                  <span>🤖 Bot Antrenmanını Başlat</span>
+                </button>
+              </div>
+
             </div>
+
           )}
 
           {/* TAB 3: PRATIK */}
@@ -657,7 +700,14 @@ export default function DashboardPage() {
           onClose={() => setShowAiCoach(false)}
         />
 
+        {/* BOT MATCH MODAL */}
+        <BotMatchModal
+          isOpen={showBotModal}
+          onClose={() => setShowBotModal(false)}
+        />
+
       </div>
     </div>
   );
 }
+

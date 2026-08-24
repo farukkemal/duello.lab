@@ -19,6 +19,23 @@ public class CreateRoomDto
     public int QuestionCount { get; set; } = 5;
 }
 
+public class CreateBotRoomDto
+{
+    [Required]
+    [MaxLength(50)]
+    public string Category { get; set; } = "TYT";
+
+    public int QuestionCount { get; set; } = 5;
+
+    /// <summary>
+    /// 1-4 arası bot zorlukları: "berkay"|"selin"|"emre"|"nur"|"esma"
+    /// Her eleman ayrı bir botu temsil eder, farklı seviyelerde olabilir.
+    /// </summary>
+    [Required]
+    public List<string> BotDifficulties { get; set; } = new();
+}
+
+
 public class JoinRoomDto
 {
     [Required]
