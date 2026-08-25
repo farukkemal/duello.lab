@@ -206,18 +206,18 @@ export default function DesktopNavbar({ activeTab, onSelectTab }: DesktopNavbarP
               <div className="relative">
                 <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-violet-600 to-cyan-400 p-[1.5px] shadow">
                   <div className="w-full h-full bg-[#0d0f22] rounded-[9px] flex items-center justify-center font-black text-white text-xs font-mono">
-                    {user.username.charAt(0).toUpperCase()}
+                    {user?.username ? user.username.charAt(0).toUpperCase() : 'U'}
                   </div>
                 </div>
                 <div className="absolute -bottom-1 -right-1 bg-amber-400 text-slate-950 font-black text-[8px] w-3.5 h-3.5 rounded-full flex items-center justify-center border border-slate-900 shadow">
-                  {user.level}
+                  {user?.level ?? 1}
                 </div>
               </div>
 
               <div className="hidden sm:block text-left">
                 <div className="flex items-center gap-1.5">
                   <span className="text-xs font-black text-white leading-tight truncate max-w-[85px]">
-                    {user.username}
+                    {user?.username || 'Savaşçı'}
                   </span>
                   <span className="text-[9px] text-cyan-300 font-mono font-bold">Lv.{user.level}</span>
                 </div>

@@ -12,15 +12,30 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
+const parseStoredUser = (): UserDto | null => {
+  try {
+    const saved = localStorage.getItem('user');
+    if (!saved) return null;
+    const parsed = JSON.parse(saved);
+    if (!parsed || typeof parsed !== 'object') return null;
+    return {
+      id: parsed.id || parsed.Id || '',
+      username: parsed.username || parsed.Username || 'Savaşçı',
+      email: parsed.email || parsed.Email || '',
+      level: parsed.level || parsed.Level || 1,
+      xp: parsed.xp || parsed.XP || 0,
+      coinBalance: parsed.coinBalance ?? parsed.CoinBalance ?? 100,
+      createdAt: parsed.createdAt || parsed.CreatedAt || '',
+      role: parsed.role || parsed.Role || 'User',
+      isBanned: parsed.isBanned ?? parsed.IsBanned ?? false
+    };
+  } catch {
+    return null;
+  }
+};
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<UserDto | null>(() => {
-    try {
-      const saved = localStorage.getItem('user');
-      return saved ? JSON.parse(saved) : null;
-    } catch {
-      return null;
-    }
-  });
+  const [user, setUser] = useState<UserDto | null>(parseStoredUser);
   const [token, setToken] = useState<string | null>(() => localStorage.getItem('token'));
   const [isLoading, setIsLoading] = useState(false);
 

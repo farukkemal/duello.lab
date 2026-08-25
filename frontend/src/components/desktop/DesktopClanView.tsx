@@ -106,12 +106,12 @@ export default function DesktopClanView({
                   <div className="flex items-center gap-2.5">
                     <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-violet-600 to-cyan-400 p-[1.5px]">
                       <div className="w-full h-full bg-[#0d0f22] rounded-[9px] flex items-center justify-center font-black text-white text-xs">
-                        {m.username.charAt(0).toUpperCase()}
+                        {m?.username ? m.username.charAt(0).toUpperCase() : 'U'}
                       </div>
                     </div>
                     <div>
                       <div className="text-xs font-black text-white flex items-center gap-1.5">
-                        <span>{m.username}</span>
+                        <span>{m?.username || 'Üye'}</span>
                         {m.role === 2 && <span className="text-[8px] bg-amber-500 text-slate-950 px-1 rounded font-black">LİDER</span>}
                         {m.role === 1 && <span className="text-[8px] bg-violet-500 text-white px-1 rounded font-bold">BÜYÜK</span>}
                       </div>

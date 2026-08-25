@@ -314,16 +314,16 @@ export default function DashboardPage() {
                   <div className="game-card-3d p-6 text-center space-y-4">
                     <div className="w-20 h-20 mx-auto rounded-3xl bg-gradient-to-tr from-violet-600 via-indigo-600 to-cyan-400 p-[3px] shadow-xl">
                       <div className="w-full h-full bg-[#0d0f22] rounded-[21px] flex items-center justify-center font-black text-white text-3xl">
-                        {user.username.charAt(0).toUpperCase()}
+                        {user?.username ? user.username.charAt(0).toUpperCase() : 'U'}
                       </div>
                     </div>
 
                     <div>
                       <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-violet-500/20 border border-violet-500/30 text-violet-300 text-xs font-black mb-1">
-                        <span>{user.role === 'Admin' ? '👑 Yönetici' : '⚔️ Savaşçı'}</span>
+                        <span>{user?.role === 'Admin' ? '👑 Yönetici' : '⚔️ Savaşçı'}</span>
                       </div>
-                      <h2 className="text-2xl font-black text-white">{user.username}</h2>
-                      <p className="text-xs text-slate-400 font-mono">{user.email}</p>
+                      <h2 className="text-2xl font-black text-white">{user?.username || 'Savaşçı'}</h2>
+                      <p className="text-xs text-slate-400 font-mono">{user?.email || ''}</p>
                     </div>
 
                     <div className="space-y-1 bg-black/40 p-3 rounded-2xl border border-white/5">
@@ -1019,11 +1019,11 @@ export default function DashboardPage() {
                   <div className="relative">
                     <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-violet-600 via-indigo-500 to-cyan-400 p-[2px] shadow-lg">
                       <div className="w-full h-full bg-[#0d0f22] rounded-[14px] flex items-center justify-center text-2xl font-black text-white font-mono">
-                        {user.username.charAt(0).toUpperCase()}
+                        {user?.username ? user.username.charAt(0).toUpperCase() : 'U'}
                       </div>
                     </div>
                     <div className="absolute -bottom-1.5 -right-1.5 bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 font-black text-[9px] px-1.5 py-0.2 rounded-full border-2 border-[#0d0f26] shadow">
-                      Lv.{user.level}
+                      Lv.{user?.level ?? 1}
                     </div>
                   </div>
                 </div>

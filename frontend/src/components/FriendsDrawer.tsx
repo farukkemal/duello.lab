@@ -152,7 +152,7 @@ export default function FriendsDrawer({ isOpen, onClose }: FriendsDrawerProps) {
                       <div className="relative">
                         <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-violet-600 to-cyan-400 p-[1.5px]">
                           <div className="w-full h-full bg-[#0d0f22] rounded-[10px] flex items-center justify-center font-black text-white text-xs">
-                            {f.username.charAt(0).toUpperCase()}
+                            {f?.username ? f.username.charAt(0).toUpperCase() : 'U'}
                           </div>
                         </div>
                         <span className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-[#131631] ${
@@ -162,7 +162,7 @@ export default function FriendsDrawer({ isOpen, onClose }: FriendsDrawerProps) {
 
                       <div>
                         <div className="text-xs font-black text-white flex items-center gap-1.5">
-                          <span>{f.username}</span>
+                          <span>{f?.username || 'Arkadaş'}</span>
                           <span className="text-[9px] text-amber-300 font-mono">Lv.{f.level}</span>
                         </div>
                         <div className="text-[10px] text-slate-400 font-mono">

@@ -116,7 +116,7 @@ export default function Navbar() {
             <div className="flex items-center gap-2 pl-1">
               <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-cyan-500 to-violet-600 p-[1px]">
                 <div className="w-full h-full bg-[#12142b] rounded-[11px] flex items-center justify-center font-bold text-white text-sm">
-                  {user.username.charAt(0).toUpperCase()}
+                  {user?.username ? user.username.charAt(0).toUpperCase() : 'U'}
                 </div>
               </div>
 

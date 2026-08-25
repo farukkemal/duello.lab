@@ -70,17 +70,17 @@ export default function MobileTopHUD({ onOpenProfile }: MobileTopHUDProps) {
             <div className="relative">
               <div className="w-7 h-7 rounded-xl bg-gradient-to-tr from-violet-600 to-cyan-400 p-[1.5px] shadow">
                 <div className="w-full h-full bg-[#0d0f22] rounded-[9px] flex items-center justify-center font-black text-white text-[11px] font-mono">
-                  {user.username.charAt(0).toUpperCase()}
+                  {user?.username ? user.username.charAt(0).toUpperCase() : 'U'}
                 </div>
               </div>
               <div className="absolute -bottom-1 -right-1 bg-amber-400 text-slate-950 font-black text-[8px] w-3.5 h-3.5 rounded-full flex items-center justify-center border border-slate-900 shadow">
-                {user.level}
+                {user?.level ?? 1}
               </div>
             </div>
 
             <div className="text-left">
               <div className="text-[11px] font-bold text-white leading-tight truncate max-w-[70px]">
-                {user.username}
+                {user?.username || 'Savaşçı'}
               </div>
               <div className="w-12 bg-slate-800 rounded-full h-1 mt-0.5 overflow-hidden p-[0.5px]">
                 <div

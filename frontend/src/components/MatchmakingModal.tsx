@@ -92,12 +92,12 @@ export default function MatchmakingModal({ mode, category, onCancel, onMatchFoun
             <div className="bg-[#1b2046] border border-white/10 rounded-2xl p-3.5 flex items-center justify-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-rose-500 to-amber-400 p-[1.5px]">
                 <div className="w-full h-full bg-[#0d0f22] rounded-[10px] flex items-center justify-center font-black text-white text-sm">
-                  {matchFoundData.opponentUsername.charAt(0).toUpperCase()}
+                  {matchFoundData.opponentUsername ? matchFoundData.opponentUsername.charAt(0).toUpperCase() : 'R'}
                 </div>
               </div>
               <div className="text-left">
-                <div className="text-sm font-black text-white">{matchFoundData.opponentUsername}</div>
-                <div className="text-[10px] text-amber-300 font-mono">Seviye {matchFoundData.opponentLevel}</div>
+                <div className="text-sm font-black text-white">{matchFoundData.opponentUsername || 'Rakip Savaşçı'}</div>
+                <div className="text-[10px] text-amber-300 font-mono">Seviye {matchFoundData.opponentLevel ?? 1}</div>
               </div>
             </div>
           </div>

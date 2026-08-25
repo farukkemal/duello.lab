@@ -65,17 +65,17 @@ export default function DesktopArenaView({
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-violet-600 via-indigo-600 to-cyan-400 p-[2px] shadow-lg">
                 <div className="w-full h-full bg-[#0d0f22] rounded-[14px] flex items-center justify-center font-black text-white text-lg">
-                  {user.username.charAt(0).toUpperCase()}
+                  {user?.username ? user.username.charAt(0).toUpperCase() : 'U'}
                 </div>
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5">
-                  <h3 className="text-sm font-black text-white truncate">{user.username}</h3>
+                  <h3 className="text-sm font-black text-white truncate">{user?.username || 'Savaşçı'}</h3>
                   <span className="text-[9px] bg-violet-600/40 text-violet-300 border border-violet-500/30 px-1.5 py-0.2 rounded font-black">
-                    Lv.{user.level}
+                    Lv.{user?.level ?? 1}
                   </span>
                 </div>
-                <p className="text-[10px] text-slate-400 font-mono truncate">{user.email}</p>
+                <p className="text-[10px] text-slate-400 font-mono truncate">{user?.email || ''}</p>
               </div>
             </div>
 
