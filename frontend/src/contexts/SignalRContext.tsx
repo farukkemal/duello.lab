@@ -81,6 +81,10 @@ export function SignalRProvider({ children }: { children: ReactNode }) {
       }
     });
 
+    newConnection.on('LeftQueueAck', () => {
+      // noop ack to prevent unhandled client method warning
+    });
+
     newConnection.onreconnecting((error) => {
       console.warn('🔄 [SignalR] Reconnecting...', error);
       setStatus('reconnecting');

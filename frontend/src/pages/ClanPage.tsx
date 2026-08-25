@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { useSignalR } from '../contexts/SignalRContext';
 import {
   getMyClan,
   getTopClans,
@@ -8,8 +9,11 @@ import {
   createClan,
   joinClan,
   leaveClan,
+  getClanMessages,
+  sendClanMessage,
   type Clan,
-  type ClanListItem
+  type ClanListItem,
+  type ClanMessage
 } from '../api/social';
 import { triggerLevelUpConfetti } from '../utils/confetti';
 import MobileTopHUD from '../components/MobileTopHUD';
@@ -17,14 +21,23 @@ import MobileBottomNav, { type MobileTab } from '../components/MobileBottomNav';
 
 export default function ClanPage() {
   const { user, refreshUser } = useAuth();
+  const { connection } = useSignalR();
   const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState<'my_clan' | 'search' | 'leaderboard'>('my_clan');
+  const [clanSubTab, setClanSubTab] = useState<'chat' | 'info'>('chat');
   const [myClan, setMyClan] = useState<Clan | null>(null);
   const [topClans, setTopClans] = useState<ClanListItem[]>([]);
   const [searchResults, setSearchResults] = useState<ClanListItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
+
+  // Clan Chat State
+  const [messages, setMessages] = useState<ClanMessage[]>([]);
+  const [chatInput, setChatInput] = useState('');
+  const [chatLoading, setChatLoading] = useState(false);
+  const [sendingMsg, setSendingMsg] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   // Create Modal
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -37,6 +50,23 @@ export default function ClanPage() {
   const [createLoading, setCreateLoading] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const loadChatMessages = async (clanId: string) => {
+    setChatLoading(true);
+    try {
+      const { data } = await getClanMessages(clanId, 50);
+      setMessages(data);
+      setTimeout(scrollToBottom, 100);
+    } catch (e) {
+      console.error('Failed to load clan messages:', e);
+    } finally {
+      setChatLoading(false);
+    }
+  };
+
   const loadData = async () => {
     setLoading(true);
     try {
@@ -47,6 +77,10 @@ export default function ClanPage() {
       setMyClan(myClanRes.data);
       setTopClans(topRes.data);
       setSearchResults(topRes.data);
+
+      if (myClanRes.data) {
+        loadChatMessages(myClanRes.data.id);
+      }
     } catch (e) {
       console.error(e);
     } finally {
@@ -57,6 +91,44 @@ export default function ClanPage() {
   useEffect(() => {
     loadData();
   }, []);
+
+  // SignalR Real-time Clan Chat Listener
+  useEffect(() => {
+    if (!connection || !myClan) return;
+
+    // Join clan chat group
+    connection.invoke('JoinClanChat', myClan.id).catch(console.error);
+
+    const handleIncomingMessage = (msg: ClanMessage) => {
+      if (msg.clanId === myClan.id) {
+        setMessages((prev) => [...prev, msg]);
+        setTimeout(scrollToBottom, 100);
+      }
+    };
+
+    connection.on('ClanMessageReceived', handleIncomingMessage);
+
+    return () => {
+      connection.off('ClanMessageReceived', handleIncomingMessage);
+      connection.invoke('LeaveClanChat', myClan.id).catch(console.error);
+    };
+  }, [connection, myClan?.id]);
+
+  const handleSendMessage = async (textToSend?: string) => {
+    const text = (textToSend || chatInput).trim();
+    if (!text || !myClan || sendingMsg) return;
+
+    setSendingMsg(true);
+    try {
+      await sendClanMessage(myClan.id, text);
+      setChatInput('');
+      setTimeout(scrollToBottom, 100);
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Mesaj gönderilemedi.');
+    } finally {
+      setSendingMsg(false);
+    }
+  };
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -84,7 +156,8 @@ export default function ClanPage() {
       setMyClan(data);
       setShowCreateModal(false);
       triggerLevelUpConfetti();
-      loadData();
+      await refreshUser();
+      await loadData();
     } catch (err: any) {
       setCreateError(err.response?.data?.error || 'Klan kurulamadı.');
     } finally {
@@ -98,7 +171,8 @@ export default function ClanPage() {
       setMyClan(data);
       setActiveTab('my_clan');
       triggerLevelUpConfetti();
-      loadData();
+      await refreshUser();
+      await loadData();
     } catch (err: any) {
       alert(err.response?.data?.error || 'Klana katılınamadı.');
     }
@@ -110,7 +184,8 @@ export default function ClanPage() {
     try {
       await leaveClan(myClan.id);
       setMyClan(null);
-      loadData();
+      await refreshUser();
+      await loadData();
     } catch (err) {
       console.error(err);
     }
@@ -177,81 +252,272 @@ export default function ClanPage() {
             </button>
           </div>
 
+          {loading && (
+            <div className="py-8 text-center text-xs font-bold text-slate-400 flex items-center justify-center gap-2">
+              <span className="w-4 h-4 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
+              Klan bilgileri yükleniyor...
+            </div>
+          )}
+
           {/* ==========================================
               TAB 1: MY CLAN (OR CREATE CLAN CALLOUT)
               ========================================== */}
-          {activeTab === 'my_clan' && (
+          {!loading && activeTab === 'my_clan' && (
             <div className="space-y-4 animate-fadeIn">
               {myClan ? (
                 /* USER HAS A CLAN */
-                <div className="space-y-4">
-                  <div className="game-card-3d p-5 text-center space-y-3 relative overflow-hidden">
-                    <div className="text-4xl animate-bounce-subtle">{myClan.badgeIcon}</div>
-                    <div>
-                      <div className="inline-block bg-violet-500/20 border border-violet-500/30 text-violet-300 text-[10px] font-black px-2 py-0.5 rounded-full uppercase mb-1">
-                        [{myClan.tag}]
-                      </div>
-                      <h2 className="text-xl font-black text-white">{myClan.name}</h2>
-                      <p className="text-xs text-slate-300 mt-1 max-w-xs mx-auto">{myClan.description}</p>
-                    </div>
+                <div className="space-y-3">
+                  
+                  {/* Clan Sub-Tabs: Chat vs Info */}
+                  <div className="flex bg-[#12152e] p-1 rounded-2xl border border-white/10 gap-1 shadow-inner">
+                    <button
+                      onClick={() => { setClanSubTab('chat'); setTimeout(scrollToBottom, 100); }}
+                      className={`flex-1 py-2 rounded-xl text-xs font-black uppercase transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                        clanSubTab === 'chat'
+                          ? 'bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-lg'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <span>💬</span> <span>Klan Sohbeti</span>
+                      {messages.length > 0 && (
+                        <span className="text-[9px] bg-cyan-400 text-slate-950 font-black px-1.5 py-0.2 rounded-full">
+                          {messages.length}
+                        </span>
+                      )}
+                    </button>
 
-                    <div className="grid grid-cols-3 gap-2 pt-2">
-                      <div className="bg-black/30 rounded-xl p-2 border border-white/5">
-                        <div className="text-[9px] text-slate-400 font-bold">Toplam XP</div>
-                        <div className="text-sm font-mono font-black text-cyan-400">{myClan.totalXp.toLocaleString()}</div>
-                      </div>
-                      <div className="bg-black/30 rounded-xl p-2 border border-white/5">
-                        <div className="text-[9px] text-slate-400 font-bold">Üye Sayısı</div>
-                        <div className="text-sm font-mono font-black text-amber-300">{myClan.memberCount} / 50</div>
-                      </div>
-                      <div className="bg-black/30 rounded-xl p-2 border border-white/5">
-                        <div className="text-[9px] text-slate-400 font-bold">Klan Sırası</div>
-                        <div className="text-sm font-mono font-black text-emerald-400">#{myClan.rank}</div>
-                      </div>
-                    </div>
+                    <button
+                      onClick={() => setClanSubTab('info')}
+                      className={`flex-1 py-2 rounded-xl text-xs font-black uppercase transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                        clanSubTab === 'info'
+                          ? 'bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-lg'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <span>🛡️</span> <span>Klan Bilgisi & Üyeler</span>
+                    </button>
                   </div>
 
-                  {/* Members List */}
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-xs font-black px-1">
-                      <span className="text-white">Klan Üyeleri ({myClan.members.length})</span>
-                      <span className="text-slate-400 text-[10px]">Lider: {myClan.leaderUsername}</span>
-                    </div>
-
-                    {myClan.members.map((m) => (
-                      <div
-                        key={m.userId}
-                        className="bg-[#171b38] border border-white/10 rounded-2xl p-3 flex items-center justify-between"
-                      >
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-violet-600 to-cyan-400 p-[1.5px]">
-                            <div className="w-full h-full bg-[#0d0f22] rounded-[9px] flex items-center justify-center font-black text-white text-xs">
-                              {m.username.charAt(0).toUpperCase()}
-                            </div>
-                          </div>
+                  {/* SUB-VIEW 1: LIVE CLAN CHAT */}
+                  {clanSubTab === 'chat' && (
+                    <div className="bg-[#121533] border border-white/10 rounded-3xl p-3 flex flex-col h-[460px] shadow-2xl relative overflow-hidden animate-fadeIn">
+                      {/* Chat Top Bar */}
+                      <div className="flex items-center justify-between pb-2.5 border-b border-white/10 shrink-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xl">{myClan.badgeIcon}</span>
                           <div>
-                            <div className="text-xs font-black text-white flex items-center gap-1.5">
-                              <span>{m.username}</span>
-                              {m.role === 2 && <span className="text-[8px] bg-amber-500 text-slate-950 px-1 rounded font-black">LİDER</span>}
-                              {m.role === 1 && <span className="text-[8px] bg-violet-500 text-white px-1 rounded font-bold">BÜYÜK</span>}
-                            </div>
-                            <div className="text-[10px] text-slate-400 font-mono">Seviye {m.level}</div>
+                            <h4 className="text-xs font-black text-white leading-tight">[{myClan.tag}] {myClan.name}</h4>
+                            <p className="text-[9px] text-emerald-400 font-mono flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                              <span>{myClan.members.length} Üye • Canlı Klan Sohbeti</span>
+                            </p>
                           </div>
                         </div>
 
-                        <div className="text-right font-mono font-black text-cyan-400 text-xs">
-                          +{m.xpContributed} XP
+                        <button
+                          onClick={() => loadChatMessages(myClan.id)}
+                          title="Sohbeti Yenile"
+                          className="w-7 h-7 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center text-xs text-slate-300 cursor-pointer active:scale-95 transition"
+                        >
+                          🔄
+                        </button>
+                      </div>
+
+                      {/* Messages Scroll Area */}
+                      <div className="flex-1 overflow-y-auto no-scrollbar py-3 space-y-2.5">
+                        {chatLoading ? (
+                          <div className="h-full flex items-center justify-center text-slate-400 text-xs font-bold gap-2">
+                            <span className="w-4 h-4 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
+                            Mesajlar yükleniyor...
+                          </div>
+                        ) : messages.length === 0 ? (
+                          <div className="h-full flex flex-col items-center justify-center text-slate-400 text-xs text-center p-4">
+                            <span className="text-3xl mb-2">💬</span>
+                            <span className="font-bold text-white">Henüz mesaj yok</span>
+                            <span className="text-[10px] text-slate-400 mt-0.5 max-w-[200px]">
+                              İlk mesajı sen gönder ve klan arkadaşlarına selam ver!
+                            </span>
+                          </div>
+                        ) : (
+                          messages.map((msg) => {
+                            const isMe = msg.userId === user?.id;
+                            const isLeader = msg.role === 2;
+                            const isElder = msg.role === 1;
+
+                            if (msg.isSystem) {
+                              return (
+                                <div key={msg.id} className="text-center my-1.5">
+                                  <span className="inline-block bg-[#090b1c] text-violet-300 border border-violet-500/20 text-[9px] font-bold px-3 py-1 rounded-full shadow-sm">
+                                    {msg.content}
+                                  </span>
+                                </div>
+                              );
+                            }
+
+                            return (
+                              <div
+                                key={msg.id}
+                                className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}
+                              >
+                                {/* Sender Info */}
+                                {!isMe && (
+                                  <div className="flex items-center gap-1.5 mb-0.5 px-1">
+                                    <span className="text-[10px] font-black text-slate-300">{msg.username}</span>
+                                    {isLeader && (
+                                      <span className="text-[8px] bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 font-black px-1.5 py-0.2 rounded-full">
+                                        👑 LİDER
+                                      </span>
+                                    )}
+                                    {isElder && (
+                                      <span className="text-[8px] bg-violet-600 text-white font-black px-1.5 py-0.2 rounded-full">
+                                        ⚡ BÜYÜK
+                                      </span>
+                                    )}
+                                    <span className="text-[8px] text-slate-500 font-mono">Lv.{msg.userLevel}</span>
+                                  </div>
+                                )}
+
+                                {/* Message Bubble */}
+                                <div
+                                  className={`max-w-[82%] px-3.5 py-2 rounded-2xl text-xs leading-relaxed break-words shadow-md ${
+                                    isMe
+                                      ? 'bg-gradient-to-r from-violet-600 to-purple-600 text-white rounded-br-none border border-violet-400/40'
+                                      : isLeader
+                                      ? 'bg-[#181c42] border border-amber-500/40 text-slate-100 rounded-bl-none'
+                                      : 'bg-[#181c42] border border-white/10 text-slate-200 rounded-bl-none'
+                                  }`}
+                                >
+                                  <div className="font-medium text-[11px] whitespace-pre-wrap">{msg.content}</div>
+                                  <div
+                                    className={`text-[8px] mt-0.5 text-right font-mono ${
+                                      isMe ? 'text-violet-200' : 'text-slate-400'
+                                    }`}
+                                  >
+                                    {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })
+                        )}
+                        <div ref={messagesEndRef} />
+                      </div>
+
+                      {/* Quick Reaction Chips */}
+                      <div className="flex gap-1 overflow-x-auto no-scrollbar py-1 shrink-0">
+                        {["🔥 Selam!", "⚔️ Düelloya gelin!", "🎯 Soru çözelim", "👑 Harika!", "💪 Başarılar", "👍"].map((quick) => (
+                          <button
+                            key={quick}
+                            onClick={() => handleSendMessage(quick)}
+                            disabled={sendingMsg}
+                            className="bg-black/30 hover:bg-white/10 border border-white/10 text-slate-300 text-[10px] font-bold px-2 py-0.5 rounded-lg whitespace-nowrap cursor-pointer active:scale-95 transition-all shrink-0"
+                          >
+                            {quick}
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Message Input Form */}
+                      <form
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          handleSendMessage(chatInput);
+                        }}
+                        className="pt-2 flex items-center gap-1.5 shrink-0 border-t border-white/10"
+                      >
+                        <input
+                          type="text"
+                          value={chatInput}
+                          onChange={(e) => setChatInput(e.target.value)}
+                          placeholder="Klan arkadaşlarına yaz..."
+                          maxLength={500}
+                          className="flex-1 bg-[#090b1c] border border-white/15 focus:border-violet-500 rounded-xl px-3 py-2 text-xs text-white placeholder:text-slate-500 outline-none transition"
+                        />
+                        <button
+                          type="submit"
+                          disabled={sendingMsg || !chatInput.trim()}
+                          className="px-3.5 py-2 rounded-xl btn-game-primary text-white font-black text-xs uppercase cursor-pointer disabled:opacity-50 active:scale-95 transition-all shrink-0 flex items-center gap-1"
+                        >
+                          <span>{sendingMsg ? '...' : 'Gönder'}</span>
+                          <span>🚀</span>
+                        </button>
+                      </form>
+                    </div>
+                  )}
+
+                  {/* SUB-VIEW 2: CLAN INFO & MEMBERS */}
+                  {clanSubTab === 'info' && (
+                    <div className="space-y-4 animate-fadeIn">
+                      <div className="game-card-3d p-5 text-center space-y-3 relative overflow-hidden">
+                        <div className="text-4xl animate-bounce-subtle">{myClan.badgeIcon}</div>
+                        <div>
+                          <div className="inline-block bg-violet-500/20 border border-violet-500/30 text-violet-300 text-[10px] font-black px-2 py-0.5 rounded-full uppercase mb-1">
+                            [{myClan.tag}]
+                          </div>
+                          <h2 className="text-xl font-black text-white">{myClan.name}</h2>
+                          <p className="text-xs text-slate-300 mt-1 max-w-xs mx-auto">{myClan.description}</p>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-2 pt-2">
+                          <div className="bg-black/30 rounded-xl p-2 border border-white/5">
+                            <div className="text-[9px] text-slate-400 font-bold">Toplam XP</div>
+                            <div className="text-sm font-mono font-black text-cyan-400">{myClan.totalXp.toLocaleString()}</div>
+                          </div>
+                          <div className="bg-black/30 rounded-xl p-2 border border-white/5">
+                            <div className="text-[9px] text-slate-400 font-bold">Üye Sayısı</div>
+                            <div className="text-sm font-mono font-black text-amber-300">{myClan.memberCount} / 50</div>
+                          </div>
+                          <div className="bg-black/30 rounded-xl p-2 border border-white/5">
+                            <div className="text-[9px] text-slate-400 font-bold">Klan Sırası</div>
+                            <div className="text-sm font-mono font-black text-emerald-400">#{myClan.rank}</div>
+                          </div>
                         </div>
                       </div>
-                    ))}
-                  </div>
 
-                  <button
-                    onClick={handleLeaveClan}
-                    className="w-full py-3 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-300 hover:bg-rose-500/25 font-bold text-xs uppercase cursor-pointer transition"
-                  >
-                    Klandan Ayrıl
-                  </button>
+                      {/* Members List */}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between text-xs font-black px-1">
+                          <span className="text-white">Klan Üyeleri ({myClan.members.length})</span>
+                          <span className="text-slate-400 text-[10px]">Lider: {myClan.leaderUsername}</span>
+                        </div>
+
+                        {myClan.members.map((m) => (
+                          <div
+                            key={m.userId}
+                            className="bg-[#171b38] border border-white/10 rounded-2xl p-3 flex items-center justify-between"
+                          >
+                            <div className="flex items-center gap-2.5">
+                              <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-violet-600 to-cyan-400 p-[1.5px]">
+                                <div className="w-full h-full bg-[#0d0f22] rounded-[9px] flex items-center justify-center font-black text-white text-xs">
+                                  {m.username.charAt(0).toUpperCase()}
+                                </div>
+                              </div>
+                              <div>
+                                <div className="text-xs font-black text-white flex items-center gap-1.5">
+                                  <span>{m.username}</span>
+                                  {m.role === 2 && <span className="text-[8px] bg-amber-500 text-slate-950 px-1 rounded font-black">LİDER</span>}
+                                  {m.role === 1 && <span className="text-[8px] bg-violet-500 text-white px-1 rounded font-bold">BÜYÜK</span>}
+                                </div>
+                                <div className="text-[10px] text-slate-400 font-mono">Seviye {m.level}</div>
+                              </div>
+                            </div>
+
+                            <div className="text-right font-mono font-black text-cyan-400 text-xs">
+                              +{m.xpContributed} XP
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      <button
+                        onClick={handleLeaveClan}
+                        className="w-full py-3 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-300 hover:bg-rose-500/25 font-bold text-xs uppercase cursor-pointer transition"
+                      >
+                        Klandan Ayrıl
+                      </button>
+                    </div>
+                  )}
+
                 </div>
               ) : (
                 /* USER DOES NOT HAVE A CLAN */
@@ -389,7 +655,7 @@ export default function ClanPage() {
         </main>
 
         {/* Bottom Nav */}
-        <MobileBottomNav activeTab="arena" onSelectTab={handleNavTab} />
+        <MobileBottomNav activeTab="klan" onSelectTab={handleNavTab} />
 
         {/* CREATE CLAN MODAL */}
         {showCreateModal && (
@@ -481,6 +747,19 @@ export default function ClanPage() {
                     onChange={(e) => setDescription(e.target.value)}
                     className="w-full bg-[#1b2046] border border-white/10 rounded-xl px-3 py-2 text-white text-xs font-bold focus:outline-none"
                   />
+                </div>
+
+                <div className="flex items-center gap-2 pt-1">
+                  <input
+                    type="checkbox"
+                    id="isOpenCheckbox"
+                    checked={isOpen}
+                    onChange={(e) => setIsOpen(e.target.checked)}
+                    className="w-4 h-4 rounded accent-violet-600"
+                  />
+                  <label htmlFor="isOpenCheckbox" className="text-xs font-bold text-slate-300 select-none cursor-pointer">
+                    Açık Klan (Herkes onaysız katılabilir)
+                  </label>
                 </div>
 
                 <button

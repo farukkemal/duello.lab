@@ -1,8 +1,10 @@
 using System.Security.Claims;
 using DuelloLab.Api.DTOs.Social;
+using DuelloLab.Api.Hubs;
 using DuelloLab.Api.Services.Social;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 
 namespace DuelloLab.Api.Controllers;
 
@@ -12,10 +14,12 @@ namespace DuelloLab.Api.Controllers;
 public class ClanController : ControllerBase
 {
     private readonly IClanService _clanService;
+    private readonly IHubContext<DuelloHub> _hubContext;
 
-    public ClanController(IClanService clanService)
+    public ClanController(IClanService clanService, IHubContext<DuelloHub> hubContext)
     {
         _clanService = clanService;
+        _hubContext = hubContext;
     }
 
     private Guid GetUserId() => Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier)!.Value);
@@ -68,5 +72,45 @@ public class ClanController : ControllerBase
     {
         var list = await _clanService.SearchClansAsync(q);
         return Ok(list);
+    }
+
+    [HttpGet("{clanId}/messages")]
+    public async Task<ActionResult<List<ClanMessageDto>>> GetClanMessages(Guid clanId, [FromQuery] int limit = 50)
+    {
+        try
+        {
+            var list = await _clanService.GetClanMessagesAsync(GetUserId(), clanId, limit);
+            return Ok(list);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Forbid(ex.Message);
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(ex.Message);
+        }
+    }
+
+    [HttpPost("{clanId}/messages")]
+    public async Task<ActionResult<ClanMessageDto>> SendClanMessage(Guid clanId, [FromBody] SendClanMessageDto dto)
+    {
+        try
+        {
+            var message = await _clanService.SendClanMessageAsync(GetUserId(), clanId, dto.Content);
+            
+            // Broadcast real-time to clan SignalR group
+            await _hubContext.Clients.Group($"clan_{clanId}").SendAsync("ClanMessageReceived", message);
+            
+            return Ok(message);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Forbid(ex.Message);
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
     }
 }

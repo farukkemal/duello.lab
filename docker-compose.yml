@@ -1,0 +1,90 @@
+services:
+  # ─── PostgreSQL Database ──────────────────────────────────────────────────
+  postgres:
+    image: postgres:17-alpine
+    container_name: duello_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-duellolab}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-duellolab}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - duello-network
+
+  # ─── Redis Realtime State & Cache ─────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: duello_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - duello-network
+
+  # ─── .NET 10 Backend API & SignalR Hub ───────────────────────────────────
+  backend:
+    build:
+      context: ./backend/DuelloLab.Api
+      dockerfile: Dockerfile
+    container_name: duello_backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:5000
+      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-duellolab};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-postgres};Trust Server Certificate=true"
+      ConnectionStrings__Redis: "redis:6379,abortConnect=false,connectTimeout=3000"
+      Jwt__Secret: ${JWT_SECRET:-DuelloLabSuperSecretKeyThatIsAtLeast32CharactersLong!}
+      Jwt__Issuer: "DuelloLab.Api"
+      Jwt__Audience: "DuelloLab.Client"
+    ports:
+      - "5000:5000"
+    networks:
+      - duello-network
+
+  # ─── React 19 Frontend + Nginx Web Server ────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: duello_frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+      - "5173:80"
+    networks:
+      - duello-network
+
+# ─── Storage Volumes & Network ─────────────────────────────────────────────
+volumes:
+  postgres_data:
+    name: duello_postgres_data
+  redis_data:
+    name: duello_redis_data
+
+networks:
+  duello-network:
+    name: duello-network
+    driver: bridge

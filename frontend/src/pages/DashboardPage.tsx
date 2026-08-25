@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { useSignalR } from '../contexts/SignalRContext';
 import { getSoloExams, type ExamListItem } from '../api/exams';
 import { createRoom, joinRoom, createBattleground, type GameMode } from '../api/rooms';
 import MobileTopHUD from '../components/MobileTopHUD';
@@ -9,11 +8,19 @@ import MobileBottomNav, { type MobileTab } from '../components/MobileBottomNav';
 import MatchmakingModal from '../components/MatchmakingModal';
 import AiCoachReportModal from '../components/AiCoachReportModal';
 import BotMatchModal from '../components/BotMatchModal';
+import InstallPwaBanner from '../components/InstallPwaBanner';
+import { getWeaknessReport, type AiCoachReport } from '../api/analytics';
+import { isAudioMuted, toggleAudioMute } from '../utils/audio';
+import {
+  CrossedSwordsGraphic,
+  HourglassBombGraphic,
+  ClashCrownsGraphic,
+  RobotMascotGraphic
+} from '../components/ArenaGraphics';
 
 
 export default function DashboardPage() {
   const { user, logout, refreshUser } = useAuth();
-  const { stats, status } = useSignalR();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
@@ -49,12 +56,28 @@ export default function DashboardPage() {
   const [modalLoading, setModalLoading] = useState(false);
   const [modalError, setModalError] = useState<string | null>(null);
 
+  // Profile & Analytics state
+  const [profileSubTab, setProfileSubTab] = useState<'analizler' | 'genel' | 'ayarlar'>('analizler');
+  const [aiReport, setAiReport] = useState<AiCoachReport | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [soundMuted, setSoundMuted] = useState(isAudioMuted());
+
   useEffect(() => {
     getSoloExams()
       .then(({ data }) => setExams(data))
       .catch(console.error)
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    if (activeTab === 'profil' && !aiReport && !aiLoading) {
+      setAiLoading(true);
+      getWeaknessReport()
+        .then(({ data }) => setAiReport(data))
+        .catch(console.error)
+        .finally(() => setAiLoading(false));
+    }
+  }, [activeTab, aiReport, aiLoading]);
 
   if (!user) return null;
 
@@ -126,170 +149,228 @@ export default function DashboardPage() {
         <MobileTopHUD onOpenProfile={() => setActiveTab('profil')} />
 
         {/* Dynamic Mobile Game Screen Content */}
-        <main className="flex-1 px-4 py-4 overflow-y-auto no-scrollbar pb-6 space-y-4">
+        <main className="flex-1 px-3 py-2.5 overflow-y-auto no-scrollbar flex flex-col">
           
-          {/* TAB 1: ARENA (4 NEW GAME MODES SELECTION) */}
+          {/* PWA Install Banner */}
+          <InstallPwaBanner />
+
+          {/* TAB 1: ARENA (MATCHING USER DESIGN SCREENSHOT) */}
           {activeTab === 'arena' && (
-            <div className="space-y-4 animate-fadeIn">
+            <div className="h-full flex flex-col justify-between gap-2 animate-fadeIn pb-0.5">
               
-              {/* Daily Quest Card */}
-              <div className="bg-gradient-to-r from-amber-500/20 via-purple-500/20 to-cyan-500/20 border border-amber-500/40 rounded-2xl p-3 flex items-center justify-between shadow-lg">
-                <div className="flex items-center gap-2.5">
-                  <span className="text-2xl animate-bounce-subtle">🎯</span>
-                  <div>
-                    <div className="text-[10px] font-black text-amber-300 uppercase tracking-wider">
-                      Günün Görevi
+              {/* 1. TOP HEADER TOOLBAR: Category Switcher + Quest Bar + AI Coach */}
+              <div className="flex items-center gap-1.5 shrink-0">
+                {/* Category Segmented Toggle */}
+                <div className="flex bg-[#0f122c] p-0.5 rounded-xl border border-white/10 shrink-0">
+                  {['TYT', 'AYT'].map((cat) => (
+                    <button
+                      key={cat}
+                      onClick={() => setSelectedCategory(cat)}
+                      className={`px-3 py-1 rounded-lg text-[11px] font-black uppercase transition-all cursor-pointer ${
+                        selectedCategory === cat
+                          ? 'bg-gradient-to-r from-blue-600 to-cyan-500 text-white shadow-[0_0_10px_rgba(6,182,212,0.4)]'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      {cat}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Daily Quest Card with Cyan Glowing Progress Bar */}
+                <div className="flex-1 min-w-0 bg-[#0f122c] border border-white/10 rounded-xl px-2.5 py-1 flex flex-col justify-center shadow-sm">
+                  <div className="flex items-center justify-between gap-1">
+                    <div className="flex items-center gap-1.5 truncate">
+                      <span className="text-xs">🎯</span>
+                      <span className="text-[10px] font-bold text-white truncate">1 Düello Kazan</span>
                     </div>
-                    <div className="text-xs font-bold text-white">1 Canlı Düelloda Podyuma Çık!</div>
+                    <span className="text-[10px] font-mono font-black text-amber-300 shrink-0">+100 💰</span>
+                  </div>
+                  {/* Glowing progress line */}
+                  <div className="w-full bg-slate-800 rounded-full h-1 mt-1 overflow-hidden">
+                    <div className="bg-gradient-to-r from-cyan-400 to-blue-500 h-full rounded-full w-3/4 shadow-[0_0_8px_rgba(6,182,212,0.8)]" />
                   </div>
                 </div>
-                <div className="bg-amber-500/20 border border-amber-500/40 text-amber-300 px-2 py-0.5 rounded-xl text-xs font-mono font-black">
-                  +100 💰
-                </div>
+
+                {/* AI Coach Button */}
+                <button
+                  onClick={() => setShowAiCoach(true)}
+                  className="bg-[#211347] hover:bg-[#2c1a5e] border border-purple-500/50 rounded-xl px-2.5 py-1.5 flex items-center gap-1 text-[10px] font-black text-purple-200 shrink-0 cursor-pointer shadow-sm active:scale-95 transition-transform"
+                  title="Zayıf Nokta Isı Haritası"
+                >
+                  <span>🧠</span>
+                  <span>AI Koç</span>
+                </button>
               </div>
 
-              {/* AI Coach Banner Card */}
-              <div
-                onClick={() => setShowAiCoach(true)}
-                className="bg-gradient-to-r from-violet-950/70 via-purple-950/60 to-indigo-950/70 border-2 border-violet-500/50 hover:border-violet-400 rounded-2xl p-3 flex items-center justify-between shadow-xl cursor-pointer active:scale-95 transition-transform"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="text-3xl animate-bounce-subtle">🧠</div>
-                  <div>
-                    <div className="inline-block bg-violet-500/20 text-violet-300 border border-violet-500/30 text-[9px] font-black px-2 py-0.2 rounded-full uppercase mb-0.5">
-                      AI Sınav Koçu
+              {/* 2. HERO FEATURED: BATTLEGROUND TURNUVASI */}
+              <div className="bg-gradient-to-r from-[#320815] via-[#240a24] to-[#0f122c] border-2 border-rose-600/70 rounded-2xl p-2.5 sm:p-3 relative overflow-hidden shadow-[0_0_15px_rgba(225,29,72,0.25)] flex items-center justify-between gap-2.5 shrink-0">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-rose-500/15 rounded-full blur-2xl pointer-events-none" />
+                
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-gradient-to-br from-amber-500 via-rose-600 to-red-600 flex items-center justify-center text-xl sm:text-2xl shrink-0 shadow-[0_0_12px_rgba(244,63,94,0.6)] border border-rose-300/40 animate-pulse">
+                    🔥
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="bg-rose-600 text-white font-black text-[8px] px-1.5 py-0.2 rounded-full uppercase tracking-wider">
+                        CANLI
+                      </span>
+                      <span className="text-[10px] font-bold text-rose-300 font-mono">180 Oyuncu</span>
                     </div>
-                    <h4 className="text-xs font-black text-white">Zayıf Nokta Isı Haritası</h4>
-                    <p className="text-[10px] text-slate-300">Ders bazlı net analizi ve kişisel tavsiyeler</p>
+                    <h3 className="text-xs sm:text-sm font-black bg-gradient-to-r from-yellow-300 via-amber-300 to-rose-300 bg-clip-text text-transparent uppercase tracking-tight leading-tight truncate">
+                      BATTLEGROUND TURNUVASI
+                    </h3>
+                    <p className="text-[9px] text-slate-300 truncate">
+                      3 soruda alan daralır, en iyi 3 kazanır!
+                    </p>
                   </div>
                 </div>
-                <span className="text-xs font-black text-violet-300 bg-violet-600/30 px-2.5 py-1.5 rounded-xl border border-violet-500/40">İncele ➔</span>
-              </div>
-
-              {/* Category Filter Pills */}
-              <div className="flex gap-2 justify-center">
-                {['TYT', 'AYT'].map((cat) => (
-                  <button
-                    key={cat}
-                    onClick={() => setSelectedCategory(cat)}
-                    className={`flex-1 py-1.5 rounded-xl text-xs font-black uppercase transition-all cursor-pointer ${
-                      selectedCategory === cat
-                        ? 'bg-gradient-to-r from-violet-600 to-cyan-500 text-white shadow-lg'
-                        : 'bg-[#171b38] text-slate-400 border border-white/10'
-                    }`}
-                  >
-                    {cat} Arenası
-                  </button>
-                ))}
-              </div>
-
-              {/* 1. FEATURED: 100-PLAYER BATTLEGROUND (BATTLE ROYALE) */}
-              <div className="bg-gradient-to-br from-rose-900/40 via-purple-900/40 to-[#10132b] border-2 border-rose-500/50 rounded-3xl p-4 text-center relative overflow-hidden shadow-2xl">
-                <div className="absolute top-2 right-2 bg-rose-500 text-white font-black text-[9px] px-2 py-0.5 rounded-full uppercase animate-pulse">
-                  CANLI TURNUVA
-                </div>
-
-                <div className="text-4xl mb-1 animate-bounce-subtle">🔥</div>
-                <h3 className="text-lg font-black text-white uppercase tracking-tight">
-                  100 Kişilik Battleground
-                </h3>
-                <p className="text-[11px] text-slate-300 mt-0.5 max-w-xs mx-auto">
-                  3 soruda bir alan daralır, en düşük %10 elenir! Son 3'e dev ödül havuzu.
-                </p>
 
                 <button
                   onClick={handleStartBattleground}
                   disabled={modalLoading}
-                  className="mt-3 w-full py-3.5 rounded-2xl bg-gradient-to-r from-rose-600 via-pink-600 to-amber-500 hover:from-rose-500 hover:to-amber-400 font-black text-xs uppercase tracking-wider text-white shadow-xl cursor-pointer active:scale-95 transition-transform"
+                  className="px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl bg-gradient-to-b from-amber-400 via-orange-500 to-rose-600 hover:from-amber-300 hover:to-rose-500 border-b-3 border-rose-900 font-black text-[10px] sm:text-xs uppercase tracking-wider text-white shadow-lg cursor-pointer active:translate-y-0.5 active:border-b-0 transition-all shrink-0 whitespace-nowrap"
                 >
-                  {modalLoading ? 'Açılıyor...' : '🏆 Battleground Turnuvasına Katıl'}
+                  {modalLoading ? '...' : '🏆 KATIL ➔'}
                 </button>
               </div>
 
-              {/* 2. RANKED 1V1 QUICK PLAY (MATCHMAKING) */}
-              <div className="game-card-3d p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="text-2xl">⚡</span>
-                    <div>
-                      <h4 className="text-sm font-black text-white leading-tight">Dereceli 1v1 Hızlı Eşleşme</h4>
-                      <p className="text-[10px] text-slate-400">3 saniyede rastgele rakip bul</p>
+              {/* 3. GAME MODES 2x2 GRID (PIXEL-PERFECT FROM SCREENSHOT) */}
+              <div className="grid grid-cols-2 gap-2 flex-1 min-h-0">
+                
+                {/* CARD 1: 1v1 Hızlı Düello */}
+                <div className="bg-gradient-to-b from-[#141738] to-[#0c0e24] border border-[#2d3166] hover:border-violet-500/80 rounded-2xl p-2.5 sm:p-3 flex flex-col justify-between relative shadow-xl transition-all group">
+                  {/* Top Bar */}
+                  <div className="flex items-center justify-between">
+                    <div className="w-7 h-7 rounded-xl bg-[#281b52] border border-violet-500/40 flex items-center justify-center text-violet-300 text-xs shadow-inner">
+                      ⚡
+                    </div>
+                    <span className="bg-[#1c1f4a] border border-indigo-500/40 text-indigo-300 text-[8px] font-black px-2 py-0.5 rounded-full">
+                      Dereceli
+                    </span>
+                  </div>
+
+                  {/* Center Illustration */}
+                  <CrossedSwordsGraphic />
+
+                  {/* Info Text */}
+                  <div className="text-left space-y-0.5">
+                    <h4 className="text-xs font-black text-white leading-tight">1v1 Hızlı Düello</h4>
+                    <p className="text-[9px] text-slate-400">3s eşleşme • +30 Kupa</p>
+                    <div className="inline-block bg-[#090b1c] px-2 py-0.5 rounded-md border border-white/5 text-[9px] font-bold text-slate-300 font-mono mt-0.5">
+                      Geçmiş G/M: <span className="text-amber-400 font-black">3/1</span>
                     </div>
                   </div>
-                  <span className="bg-violet-500/20 text-violet-300 text-[9px] font-black px-2 py-0.5 rounded-md border border-violet-500/30">
-                    ÜCRETSİZ
-                  </span>
+
+                  {/* Action Button */}
+                  <button
+                    onClick={() => setMatchmakingMode(1)}
+                    className="w-full mt-2 py-2 rounded-xl bg-gradient-to-b from-[#9061f9] to-[#6d28d9] border-b-3 border-[#4c1d95] text-white font-black text-[10px] sm:text-[11px] uppercase tracking-wider shadow-lg cursor-pointer active:translate-y-0.5 active:border-b-0 transition-all flex items-center justify-center gap-1"
+                  >
+                    <span>⚡</span> <span>1V1 OYNA</span>
+                  </button>
                 </div>
 
-                <button
-                  onClick={() => setMatchmakingMode(1)}
-                  className="w-full py-3 rounded-xl btn-game-primary text-white font-black text-xs uppercase cursor-pointer"
-                >
-                  ⚡ Hemen 1v1 Oyna ➔
-                </button>
-              </div>
+                {/* CARD 2: Ani Ölüm (Sudden Death) */}
+                <div className="bg-gradient-to-b from-[#141738] to-[#0c0e24] border border-[#2d3166] hover:border-rose-500/80 rounded-2xl p-2.5 sm:p-3 flex flex-col justify-between relative shadow-xl transition-all group">
+                  {/* Top Bar */}
+                  <div className="flex items-center justify-between">
+                    <div className="w-7 h-7 rounded-xl bg-[#441224] border border-rose-500/40 flex items-center justify-center text-rose-300 text-xs shadow-inner">
+                      ⏱️
+                    </div>
+                    <span className="bg-[#381024] border border-rose-500/40 text-rose-300 text-[8px] font-black px-2 py-0.5 rounded-full">
+                      Turbo
+                    </span>
+                  </div>
 
-              {/* 3. SUDDEN DEATH (ANİ ÖLÜM) */}
-              <div className="game-card-3d p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="text-2xl">⏱️</span>
-                    <div>
-                      <h4 className="text-sm font-black text-white leading-tight">Ani Ölüm (Sudden Death)</h4>
-                      <p className="text-[10px] text-slate-400">15s süre, ilk yanlışta elenme!</p>
+                  {/* Center Illustration */}
+                  <HourglassBombGraphic />
+
+                  {/* Info Text */}
+                  <div className="text-left space-y-0.5">
+                    <h4 className="text-xs font-black text-white leading-tight">Ani Ölüm</h4>
+                    <p className="text-[9px] text-slate-400">15s süre • 1 hata = son</p>
+                    <div className="inline-block bg-[#090b1c] px-2 py-0.5 rounded-md border border-white/5 text-[9px] font-bold text-slate-300 font-mono mt-0.5">
+                      Rekor Süre: <span className="text-cyan-300 font-black">14s</span>
                     </div>
                   </div>
-                  <span className="bg-rose-500/20 text-rose-300 text-[9px] font-black px-2 py-0.5 rounded-md border border-rose-500/30">
-                    TURBO
-                  </span>
+
+                  {/* Action Button */}
+                  <button
+                    onClick={() => setMatchmakingMode(3)}
+                    className="w-full mt-2 py-2 rounded-xl bg-gradient-to-b from-[#f43f5e] via-[#e11d48] to-[#be123c] border-b-3 border-[#881337] text-white font-black text-[10px] sm:text-[11px] uppercase tracking-wider shadow-lg cursor-pointer active:translate-y-0.5 active:border-b-0 transition-all flex items-center justify-center gap-1"
+                  >
+                    <span>⏱️</span> <span>BAŞLA</span>
+                  </button>
                 </div>
 
-                <button
-                  onClick={() => setMatchmakingMode(3)}
-                  className="w-full py-3 rounded-xl bg-gradient-to-r from-rose-600 to-amber-600 font-black text-xs uppercase text-white shadow-lg cursor-pointer active:scale-95"
-                >
-                  ⏱️ Ani Ölüm Modunu Başlat ➔
-                </button>
-              </div>
+                {/* CARD 3: 2v2 Takım (Squad) */}
+                <div className="bg-gradient-to-b from-[#141738] to-[#0c0e24] border border-[#2d3166] hover:border-cyan-500/80 rounded-2xl p-2.5 sm:p-3 flex flex-col justify-between relative shadow-xl transition-all group">
+                  {/* Top Bar */}
+                  <div className="flex items-center justify-between">
+                    <div className="w-7 h-7 rounded-xl bg-[#0e3347] border border-cyan-500/40 flex items-center justify-center text-cyan-300 text-xs shadow-inner">
+                      👑
+                    </div>
+                    <span className="bg-[#0c2838] border border-cyan-500/40 text-cyan-300 text-[8px] font-black px-2 py-0.5 rounded-full">
+                      Takım
+                    </span>
+                  </div>
 
-              {/* 4. SQUAD 2V2 (TAKIM SAVAŞI) */}
-              <div className="game-card-3d p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="text-2xl">👑</span>
-                    <div>
-                      <h4 className="text-sm font-black text-white leading-tight">2v2 Takım Savaşı (Squad)</h4>
-                      <p className="text-[10px] text-slate-400">Kırmızı vs Mavi Takım ortak net skoru</p>
+                  {/* Center Illustration */}
+                  <ClashCrownsGraphic />
+
+                  {/* Info Text */}
+                  <div className="text-left space-y-0.5">
+                    <h4 className="text-xs font-black text-white leading-tight">2v2 Takım</h4>
+                    <p className="text-[9px] text-slate-400">Kırmızı vs Mavi puanı</p>
+                    <div className="inline-block bg-[#090b1c] px-2 py-0.5 rounded-md border border-white/5 text-[9px] font-bold text-slate-300 font-mono mt-0.5">
+                      Liderlik Sırası: <span className="text-amber-400 font-black">#7</span>
                     </div>
                   </div>
-                  <span className="bg-cyan-500/20 text-cyan-300 text-[9px] font-black px-2 py-0.5 rounded-md border border-cyan-500/30">
-                    TAKIM
-                  </span>
+
+                  {/* Action Button */}
+                  <button
+                    onClick={() => setMatchmakingMode(4)}
+                    className="w-full mt-2 py-2 rounded-xl bg-gradient-to-b from-[#22d3ee] to-[#0891b2] border-b-3 border-[#155e75] text-slate-950 font-black text-[10px] sm:text-[11px] uppercase tracking-wider shadow-lg cursor-pointer active:translate-y-0.5 active:border-b-0 transition-all flex items-center justify-center gap-1"
+                  >
+                    <span>👥</span> <span>2v2 EŞLEŞ</span>
+                  </button>
                 </div>
 
-                <button
-                  onClick={() => setMatchmakingMode(4)}
-                  className="w-full py-3 rounded-xl btn-game-secondary font-black text-xs uppercase cursor-pointer"
-                >
-                  👑 2v2 Eşleşme Kuyruğuna Gir ➔
-                </button>
-              </div>
+                {/* CARD 4: Bot Pratik */}
+                <div className="bg-gradient-to-b from-[#141738] to-[#0c0e24] border border-[#2d3166] hover:border-emerald-500/80 rounded-2xl p-2.5 sm:p-3 flex flex-col justify-between relative shadow-xl transition-all group">
+                  {/* Top Bar */}
+                  <div className="flex items-center justify-between">
+                    <div className="w-7 h-7 rounded-xl bg-[#0c3829] border border-emerald-500/40 flex items-center justify-center text-emerald-300 text-xs shadow-inner">
+                      🤖
+                    </div>
+                    <span className="bg-[#0c3328] border border-emerald-500/40 text-emerald-300 text-[8px] font-black px-2 py-0.5 rounded-full">
+                      Pratik
+                    </span>
+                  </div>
 
-              {/* 5. CUSTOM ROOMS (CREATE / JOIN) */}
-              <div className="grid grid-cols-2 gap-2.5 pt-1">
-                <button
-                  onClick={() => setShowCreateModal(true)}
-                  className="py-3 rounded-xl btn-game-gold font-black text-[11px] uppercase flex items-center justify-center gap-1.5 cursor-pointer"
-                >
-                  <span>🏰 Özel Lobi (50 💰)</span>
-                </button>
+                  {/* Center Illustration */}
+                  <RobotMascotGraphic />
 
-                <button
-                  onClick={() => setShowJoinModal(true)}
-                  className="py-3 rounded-xl bg-[#1b2046] border border-white/15 hover:border-violet-500 font-black text-[11px] text-white uppercase flex items-center justify-center gap-1.5 cursor-pointer"
-                >
-                  <span>🔑 Koda Katıl</span>
-                </button>
+                  {/* Info Text */}
+                  <div className="text-left space-y-0.5">
+                    <h4 className="text-xs font-black text-white leading-tight">Bot Pratik</h4>
+                    <p className="text-[9px] text-slate-400">YKS botlarıyla antrenman</p>
+                    <div className="inline-block bg-[#090b1c] px-2 py-0.5 rounded-md border border-white/5 text-[9px] font-bold text-slate-300 font-mono mt-0.5">
+                      Yüksek Puan: <span className="text-amber-400 font-black">880</span>
+                    </div>
+                  </div>
+
+                  {/* Action Button */}
+                  <button
+                    onClick={() => setShowBotModal(true)}
+                    className="w-full mt-2 py-2 rounded-xl bg-gradient-to-b from-[#34d399] to-[#059669] border-b-3 border-[#047857] text-slate-950 font-black text-[10px] sm:text-[11px] uppercase tracking-wider shadow-lg cursor-pointer active:translate-y-0.5 active:border-b-0 transition-all flex items-center justify-center gap-1"
+                  >
+                    <span>🤖</span> <span>ANTRENMAN</span>
+                  </button>
+                </div>
+
               </div>
 
             </div>
@@ -401,29 +482,36 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              <div className="space-y-3">
-                {filteredExams.map((exam) => (
-                  <div
-                    key={exam.id}
-                    onClick={() => navigate(`/exam/${exam.id}`)}
-                    className="game-card-3d p-4 flex items-center justify-between cursor-pointer active:scale-98 transition-transform"
-                  >
-                    <div>
-                      <div className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-violet-500/20 text-violet-300 border border-violet-500/30 mb-1.5">
-                        {exam.category}
+              {loading ? (
+                <div className="py-8 text-center text-xs font-bold text-slate-400 flex items-center justify-center gap-2">
+                  <span className="w-4 h-4 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
+                  Sınavlar yükleniyor...
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {filteredExams.map((exam) => (
+                    <div
+                      key={exam.id}
+                      onClick={() => navigate(`/exam/${exam.id}`)}
+                      className="game-card-3d p-4 flex items-center justify-between cursor-pointer active:scale-98 transition-transform"
+                    >
+                      <div>
+                        <div className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-violet-500/20 text-violet-300 border border-violet-500/30 mb-1.5">
+                          {exam.category}
+                        </div>
+                        <h4 className="text-sm font-black text-white leading-tight">{exam.title}</h4>
+                        <div className="text-[11px] text-slate-400 mt-1 font-mono">
+                          {exam.questionCount} Soru • +{exam.questionCount * 10} XP
+                        </div>
                       </div>
-                      <h4 className="text-sm font-black text-white leading-tight">{exam.title}</h4>
-                      <div className="text-[11px] text-slate-400 mt-1 font-mono">
-                        {exam.questionCount} Soru • +{exam.questionCount * 10} XP
-                      </div>
-                    </div>
 
-                    <button className="px-4 py-2 rounded-xl btn-game-primary text-white font-black text-xs uppercase cursor-pointer">
-                      Başla
-                    </button>
-                  </div>
-                ))}
-              </div>
+                      <button className="px-4 py-2 rounded-xl btn-game-primary text-white font-black text-xs uppercase cursor-pointer">
+                        Başla
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -482,55 +570,358 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* TAB 5: PROFIL */}
+          {/* TAB 5: PROFIL & DERİN ANALİZLER */}
           {activeTab === 'profil' && (
-            <div className="space-y-4 animate-fadeIn">
-              <div className="game-card-3d p-6 text-center space-y-3">
-                <div className="w-16 h-16 mx-auto rounded-3xl bg-gradient-to-tr from-violet-600 to-cyan-400 p-0.5 shadow-xl">
-                  <div className="w-full h-full bg-[#0d0f22] rounded-[22px] flex items-center justify-center text-3xl font-black text-white font-mono">
-                    {user.username.charAt(0).toUpperCase()}
+            <div className="space-y-3.5 animate-fadeIn pb-4">
+              
+              {/* 1. HERO PROFILE CARD */}
+              <div className="bg-gradient-to-b from-[#161a3d] to-[#0d0f26] border-2 border-violet-500/30 rounded-3xl p-4 sm:p-5 text-center relative overflow-hidden shadow-2xl space-y-3">
+                <div className="absolute top-0 right-0 w-36 h-36 bg-violet-600/10 rounded-full blur-2xl pointer-events-none" />
+                <div className="absolute bottom-0 left-0 w-36 h-36 bg-cyan-600/10 rounded-full blur-2xl pointer-events-none" />
+
+                <div className="flex items-center justify-between">
+                  <div className="text-left">
+                    <span className="inline-block bg-violet-500/20 text-violet-300 border border-violet-500/40 text-[9px] font-black px-2 py-0.5 rounded-full uppercase mb-1">
+                      {user.role === 'Admin' ? '👑 Yönetici' : '⚔️ Savaşçı'}
+                    </span>
+                    <h3 className="text-base sm:text-lg font-black text-white leading-tight flex items-center gap-1.5">
+                      <span>{user.username}</span>
+                      <span className="text-emerald-400 text-xs" title="Doğrulanmış Hesap">✓</span>
+                    </h3>
+                    <p className="text-[10px] text-slate-400 font-mono truncate max-w-[180px]">{user.email}</p>
+                  </div>
+
+                  {/* 3D Avatar */}
+                  <div className="relative">
+                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-violet-600 via-indigo-500 to-cyan-400 p-[2px] shadow-lg">
+                      <div className="w-full h-full bg-[#0d0f22] rounded-[14px] flex items-center justify-center text-2xl font-black text-white font-mono">
+                        {user.username.charAt(0).toUpperCase()}
+                      </div>
+                    </div>
+                    <div className="absolute -bottom-1.5 -right-1.5 bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 font-black text-[9px] px-1.5 py-0.2 rounded-full border-2 border-[#0d0f26] shadow">
+                      Lv.{user.level}
+                    </div>
                   </div>
                 </div>
 
-                <div>
-                  <h3 className="text-xl font-black text-white">{user.username}</h3>
-                  <p className="text-xs text-slate-400">{user.email}</p>
-                </div>
-
-                <div className="bg-black/30 rounded-2xl p-3 border border-white/5 text-left space-y-1.5">
-                  <div className="flex justify-between text-xs font-bold">
-                    <span className="text-slate-300">Seviye {user.level}</span>
+                {/* Level Progress Bar */}
+                <div className="bg-[#090b1c]/90 rounded-2xl p-2.5 border border-white/5 text-left space-y-1.5">
+                  <div className="flex justify-between text-[11px] font-black">
+                    <span className="text-slate-300 flex items-center gap-1">
+                      <span>⭐ Seviye {user.level}</span>
+                    </span>
                     <span className="text-violet-400 font-mono">{xpCurrent} / 1000 XP</span>
                   </div>
-                  <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+                  <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden p-[0.5px]">
                     <div
-                      className="bg-gradient-to-r from-violet-500 to-cyan-400 h-full rounded-full transition-all duration-500"
+                      className="bg-gradient-to-r from-violet-500 via-purple-500 to-cyan-400 h-full rounded-full transition-all duration-500 shadow-[0_0_8px_rgba(139,92,246,0.6)]"
                       style={{ width: `${xpPercent}%` }}
                     />
                   </div>
-                  <div className="text-[10px] text-slate-400 text-right">
-                    Sonraki seviyeye {xpLeft} XP kaldı
+                  <div className="flex justify-between text-[9px] text-slate-400 font-mono">
+                    <span>İlerleme: %{xpPercent}</span>
+                    <span>Sonraki seviyeye {xpLeft} XP</span>
+                  </div>
+                </div>
+
+                {/* Quick 4 Metrics Grid */}
+                <div className="grid grid-cols-4 gap-1.5 pt-0.5">
+                  <div className="bg-[#10132b] border border-white/5 rounded-xl p-2 text-center">
+                    <div className="text-sm mb-0.5">🏆</div>
+                    <div className="text-[9px] text-slate-400 font-bold">Kupa</div>
+                    <div className="text-[11px] font-mono font-black text-amber-300">{Math.floor(user.xp / 10)}</div>
+                  </div>
+                  <div className="bg-[#10132b] border border-white/5 rounded-xl p-2 text-center">
+                    <div className="text-sm mb-0.5">💰</div>
+                    <div className="text-[9px] text-slate-400 font-bold">Coin</div>
+                    <div className="text-[11px] font-mono font-black text-amber-400">{user.coinBalance.toLocaleString()}</div>
+                  </div>
+                  <div className="bg-[#10132b] border border-white/5 rounded-xl p-2 text-center">
+                    <div className="text-sm mb-0.5">🎯</div>
+                    <div className="text-[9px] text-slate-400 font-bold">Başarı</div>
+                    <div className="text-[11px] font-mono font-black text-emerald-400">%{aiReport?.overallAccuracyRate ?? 78}</div>
+                  </div>
+                  <div className="bg-[#10132b] border border-white/5 rounded-xl p-2 text-center">
+                    <div className="text-sm mb-0.5">⚡</div>
+                    <div className="text-[9px] text-slate-400 font-bold">Soru</div>
+                    <div className="text-[11px] font-mono font-black text-cyan-400">{aiReport?.totalQuestionsSolved ?? Math.floor(user.xp / 20)}</div>
                   </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-[#171b38] border border-white/10 rounded-2xl p-3.5 text-center">
-                  <div className="text-xs text-slate-400 font-bold">Toplam XP</div>
-                  <div className="text-xl font-mono font-black text-cyan-400 mt-0.5">{user.xp.toLocaleString()}</div>
-                </div>
-                <div className="bg-[#171b38] border border-white/10 rounded-2xl p-3.5 text-center">
-                  <div className="text-xs text-slate-400 font-bold">Coin Bakiyesi</div>
-                  <div className="text-xl font-mono font-black text-amber-400 mt-0.5">{user.coinBalance.toLocaleString()} 💰</div>
-                </div>
+              {/* 2. PROFILE SUB-TABS NAVIGATION */}
+              <div className="flex bg-[#0f122c] p-1 rounded-2xl border border-white/10 gap-1 shadow-inner">
+                <button
+                  onClick={() => setProfileSubTab('analizler')}
+                  className={`flex-1 py-2 rounded-xl text-[11px] font-black uppercase transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    profileSubTab === 'analizler'
+                      ? 'bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-lg'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <span>🧠</span> <span>AI & Analizler</span>
+                </button>
+                <button
+                  onClick={() => setProfileSubTab('genel')}
+                  className={`flex-1 py-2 rounded-xl text-[11px] font-black uppercase transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    profileSubTab === 'genel'
+                      ? 'bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-lg'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <span>📊</span> <span>Genel Bakış</span>
+                </button>
+                <button
+                  onClick={() => setProfileSubTab('ayarlar')}
+                  className={`flex-1 py-2 rounded-xl text-[11px] font-black uppercase transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    profileSubTab === 'ayarlar'
+                      ? 'bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-lg'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <span>⚙️</span> <span>Ayarlar</span>
+                </button>
               </div>
 
-              <button
-                onClick={logout}
-                className="w-full py-3.5 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-300 hover:bg-rose-500/25 font-black text-xs uppercase tracking-wider transition cursor-pointer"
-              >
-                Oturumu Kapat
-              </button>
+              {/* 3. SUB-TAB CONTENT: ANALİZLER (AI HEATMAP & WEAKNESS BREAKDOWN) */}
+              {profileSubTab === 'analizler' && (
+                <div className="space-y-3 animate-fadeIn">
+                  
+                  {aiLoading ? (
+                    <div className="py-8 text-center text-xs font-bold text-slate-400 flex items-center justify-center gap-2">
+                      <span className="w-4 h-4 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
+                      Yapay zeka analizleri derleniyor...
+                    </div>
+                  ) : aiReport && (
+                    <>
+                      {/* Strength & Weakness Callouts */}
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="bg-emerald-950/40 border border-emerald-500/40 rounded-2xl p-3 flex items-center gap-2.5 shadow-md">
+                          <div className="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-lg shrink-0">
+                            🛡️
+                          </div>
+                          <div className="min-w-0">
+                            <div className="text-[9px] text-emerald-400 font-bold uppercase">En Güçlü Branş</div>
+                            <div className="text-xs font-black text-white truncate">{aiReport.strongestBranch}</div>
+                          </div>
+                        </div>
+
+                        <div className="bg-rose-950/40 border border-rose-500/40 rounded-2xl p-3 flex items-center gap-2.5 shadow-md">
+                          <div className="w-9 h-9 rounded-xl bg-rose-500/20 border border-rose-500/30 flex items-center justify-center text-lg shrink-0">
+                            🎯
+                          </div>
+                          <div className="min-w-0">
+                            <div className="text-[9px] text-rose-400 font-bold uppercase">Geliştirilmeli</div>
+                            <div className="text-xs font-black text-white truncate">{aiReport.weakestBranch}</div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* AI Coach Personal Strategy Box */}
+                      <div className="bg-gradient-to-r from-violet-950/70 via-purple-950/60 to-indigo-950/70 border-2 border-violet-500/40 rounded-2xl p-3.5 space-y-2 shadow-xl">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5 text-xs font-black text-violet-300 uppercase">
+                            <span>🤖 AI Sınav Koçu Tavsiyeleri</span>
+                          </div>
+                          <span className="text-[9px] bg-violet-500/30 text-violet-200 border border-violet-400/40 px-2 py-0.5 rounded-full font-bold">
+                            KİŞİSEL
+                          </span>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          {aiReport.aiAdviceList.map((advice, idx) => (
+                            <div key={idx} className="text-[11px] text-slate-200 font-medium leading-snug flex items-start gap-1.5">
+                              <span className="text-violet-400 text-xs shrink-0">•</span>
+                              <span>{advice}</span>
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="pt-1.5 flex items-center justify-between text-[10px] bg-black/40 px-2.5 py-1.5 rounded-xl border border-white/5">
+                          <span className="text-slate-400 font-bold">🎯 Önerilen Günlük Mod:</span>
+                          <span className="font-black text-amber-300 font-mono">{aiReport.dailyRecommendedMode}</span>
+                        </div>
+                      </div>
+
+                      {/* Branch Weakness Heatmap Cards */}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between text-xs font-black px-1">
+                          <span className="text-white flex items-center gap-1">
+                            <span>🔥</span> <span>Ders & Branş Isı Haritası</span>
+                          </span>
+                          <span className="text-[10px] text-slate-400 font-mono">Net Başarısı</span>
+                        </div>
+
+                        <div className="space-y-2">
+                          {aiReport.branchHeatmap.map((branch) => {
+                            const isMastered = branch.masteryLevel === 'Mastered';
+                            const isNeedsWork = branch.masteryLevel === 'NeedsWork';
+
+                            return (
+                              <div
+                                key={branch.branch}
+                                className="bg-[#121533] border border-white/10 hover:border-violet-500/50 rounded-2xl p-3 space-y-2 transition-all shadow-md"
+                              >
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-base">
+                                      {branch.branch === 'Matematik' || branch.branch === 'Geometri' ? '📐' :
+                                       branch.branch === 'Türkçe' ? '📖' :
+                                       branch.branch === 'Fizik' ? '⚡' :
+                                       branch.branch === 'Kimya' ? '🧪' :
+                                       branch.branch === 'Biyoloji' ? '🧬' :
+                                       branch.branch === 'Tarih' ? '🏛️' : '🌍'}
+                                    </span>
+                                    <div>
+                                      <h4 className="text-xs font-black text-white">{branch.branch}</h4>
+                                      <div className="text-[10px] text-slate-400 font-mono">
+                                        {branch.correctCount} Doğru • {branch.wrongCount} Yanlış
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  <div className="text-right">
+                                    <span
+                                      className={`text-[9px] font-black px-2 py-0.5 rounded-full border ${
+                                        isMastered
+                                          ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                                          : isNeedsWork
+                                          ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                                          : 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+                                      }`}
+                                    >
+                                      {isMastered ? '👑 Usta' : isNeedsWork ? '⚡ Geliştirilmeli' : '⚠️ Kritik'}
+                                    </span>
+                                    <div className="text-xs font-mono font-black text-white mt-0.5">
+                                      %{branch.accuracyRate}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Custom Colored Progress Bar */}
+                                <div className="w-full bg-slate-800/80 rounded-full h-2 overflow-hidden p-[0.5px]">
+                                  <div
+                                    className={`h-full rounded-full transition-all duration-500 ${
+                                      isMastered
+                                        ? 'bg-gradient-to-r from-emerald-500 to-teal-400 shadow-[0_0_8px_rgba(16,185,129,0.5)]'
+                                        : isNeedsWork
+                                        ? 'bg-gradient-to-r from-amber-500 to-yellow-400 shadow-[0_0_8px_rgba(245,158,11,0.5)]'
+                                        : 'bg-gradient-to-r from-rose-600 to-pink-500 shadow-[0_0_8px_rgba(244,63,94,0.5)]'
+                                    }`}
+                                    style={{ width: `${Math.max(8, branch.accuracyRate)}%` }}
+                                  />
+                                </div>
+
+                                <p className="text-[10px] text-slate-300 bg-black/25 px-2.5 py-1 rounded-xl border border-white/5">
+                                  💡 {branch.recommendation}
+                                </p>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* 4. SUB-TAB CONTENT: GENEL BAKIŞ */}
+              {profileSubTab === 'genel' && (
+                <div className="space-y-3 animate-fadeIn">
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <div className="bg-[#121533] border border-white/10 rounded-2xl p-3.5 text-center">
+                      <div className="text-2xl mb-1">👑</div>
+                      <div className="text-[10px] text-slate-400 font-bold uppercase">Kazanılan Düello</div>
+                      <div className="text-lg font-mono font-black text-amber-400 mt-0.5">
+                        {Math.floor(user.xp / 45)} Zafer
+                      </div>
+                    </div>
+                    <div className="bg-[#121533] border border-white/10 rounded-2xl p-3.5 text-center">
+                      <div className="text-2xl mb-1">🔥</div>
+                      <div className="text-[10px] text-slate-400 font-bold uppercase">En İyi Seri</div>
+                      <div className="text-lg font-mono font-black text-rose-400 mt-0.5">
+                        5 Galibiyet
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-[#121533] border border-white/10 rounded-2xl p-4 space-y-2">
+                    <div className="text-xs font-black text-white flex items-center gap-1.5">
+                      <span>🎖️</span> <span>Kazanılan Başarımlar</span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 pt-1">
+                      <div className="bg-black/30 border border-amber-500/30 rounded-xl p-2 text-center">
+                        <div className="text-xl">🏆</div>
+                        <div className="text-[9px] font-bold text-amber-300 mt-1">İlk Zafer</div>
+                        <div className="text-[8px] text-slate-400">Tamamlandı</div>
+                      </div>
+                      <div className="bg-black/30 border border-violet-500/30 rounded-xl p-2 text-center">
+                        <div className="text-xl">⚡</div>
+                        <div className="text-[9px] font-bold text-violet-300 mt-1">Hızlı Seri</div>
+                        <div className="text-[8px] text-slate-400">Tamamlandı</div>
+                      </div>
+                      <div className="bg-black/30 border border-cyan-500/30 rounded-xl p-2 text-center">
+                        <div className="text-xl">🎓</div>
+                        <div className="text-[9px] font-bold text-cyan-300 mt-1">YKS Çözer</div>
+                        <div className="text-[8px] text-slate-400">Seviye 1</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 5. SUB-TAB CONTENT: AYARLAR */}
+              {profileSubTab === 'ayarlar' && (
+                <div className="space-y-3 animate-fadeIn">
+                  <div className="bg-[#121533] border border-white/10 rounded-2xl p-4 space-y-3">
+                    <div className="text-xs font-black text-white uppercase tracking-wider">
+                      Oyun ve Ses Ayarları
+                    </div>
+
+                    <div className="flex items-center justify-between p-2.5 bg-black/30 rounded-xl border border-white/5">
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg">{soundMuted ? '🔇' : '🔊'}</span>
+                        <div>
+                          <div className="text-xs font-black text-white">Ses Efektleri</div>
+                          <div className="text-[10px] text-slate-400">Oyun içi sesler ve alkışlar</div>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => {
+                          const newMuted = toggleAudioMute();
+                          setSoundMuted(newMuted);
+                        }}
+                        className={`px-3 py-1 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                          soundMuted
+                            ? 'bg-slate-700 text-slate-300'
+                            : 'bg-emerald-600 text-white shadow-lg'
+                        }`}
+                      >
+                        {soundMuted ? 'KAPALI' : 'AÇIK'}
+                      </button>
+                    </div>
+
+                    <div className="flex items-center justify-between p-2.5 bg-black/30 rounded-xl border border-white/5">
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg">🔔</span>
+                        <div>
+                          <div className="text-xs font-black text-white">Anlık Bildirimler</div>
+                          <div className="text-[10px] text-slate-400">Düello davetleri ve ödül uyarıları</div>
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-mono text-emerald-400 font-black">AKTİF</span>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={logout}
+                    className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-rose-600 to-red-600 border-b-3 border-rose-900 text-white hover:from-rose-500 hover:to-red-500 font-black text-xs uppercase tracking-wider transition cursor-pointer shadow-lg active:translate-y-0.5 active:border-b-0"
+                  >
+                    🚪 Oturumu Kapat
+                  </button>
+                </div>
+              )}
+
             </div>
           )}
 

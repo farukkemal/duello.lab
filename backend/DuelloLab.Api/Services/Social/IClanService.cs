@@ -11,4 +11,6 @@ public interface IClanService
     Task<ClanDto?> GetUserClanAsync(Guid userId);
     Task<List<ClanListItemDto>> GetTopClansAsync(int limit = 20);
     Task<List<ClanListItemDto>> SearchClansAsync(string query);
+    Task<List<ClanMessageDto>> GetClanMessagesAsync(Guid userId, Guid clanId, int limit = 50);
+    Task<ClanMessageDto> SendClanMessageAsync(Guid userId, Guid clanId, string content);
 }

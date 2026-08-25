@@ -67,6 +67,18 @@ export interface PendingFriendRequest {
   sentAt: string;
 }
 
+export interface ClanMessage {
+  id: string;
+  clanId: string;
+  userId: string;
+  username: string;
+  userLevel: number;
+  role: 0 | 1 | 2;
+  content: string;
+  isSystem: boolean;
+  createdAt: string;
+}
+
 // Clan APIs
 export const getMyClan = () => api.get<Clan | null>('/clan/my-clan');
 export const getClan = (clanId: string) => api.get<Clan>(`/clan/${clanId}`);
@@ -75,6 +87,8 @@ export const searchClans = (query: string) => api.get<ClanListItem[]>(`/clan/sea
 export const createClan = (data: CreateClanRequest) => api.post<Clan>('/clan/create', data);
 export const joinClan = (clanId: string) => api.post<Clan>(`/clan/${clanId}/join`);
 export const leaveClan = (clanId: string) => api.post(`/clan/${clanId}/leave`);
+export const getClanMessages = (clanId: string, limit = 50) => api.get<ClanMessage[]>(`/clan/${clanId}/messages?limit=${limit}`);
+export const sendClanMessage = (clanId: string, content: string) => api.post<ClanMessage>(`/clan/${clanId}/messages`, { content });
 
 // Friend APIs
 export const getFriendsList = () => api.get<Friend[]>('/friend/list');
@@ -82,3 +96,4 @@ export const getPendingFriendRequests = () => api.get<PendingFriendRequest[]>('/
 export const sendFriendRequest = (targetUsername: string) => api.post<PendingFriendRequest>('/friend/request', { targetUsername });
 export const respondFriendRequest = (friendshipId: string, accept: boolean) => api.post('/friend/respond', { friendshipId, accept });
 export const removeFriend = (friendshipId: string) => api.delete(`/friend/${friendshipId}`);
+

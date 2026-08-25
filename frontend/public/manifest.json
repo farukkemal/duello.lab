@@ -1,0 +1,57 @@
+{
+  "name": "duello.lab — Canlı YKS & TYT/AYT Düello Arenası",
+  "short_name": "duello.lab",
+  "description": "Brawl Stars & Clash Royale tarzı gerçek zamanlı YKS, TYT ve AYT soru düello oyunu.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "fullscreen", "window-controls-overlay"],
+  "orientation": "portrait-primary",
+  "background_color": "#060710",
+  "theme_color": "#0c0e22",
+  "lang": "tr-TR",
+  "categories": ["games", "education"],
+  "icons": [
+    {
+      "src": "/pwa-icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/favicon.svg",
+      "sizes": "48x48",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "⚡ Hızlı Düello",
+      "short_name": "Düello",
+      "description": "Anında canlı rakiple eşleş ve düelloya başla",
+      "url": "/dashboard?tab=duello",
+      "icons": [{ "src": "/pwa-icon.svg", "sizes": "192x192" }]
+    },
+    {
+      "name": "🏰 Klanım",
+      "short_name": "Klan",
+      "description": "Klan sıralaması ve klan savaşları",
+      "url": "/clan",
+      "icons": [{ "src": "/pwa-icon.svg", "sizes": "192x192" }]
+    },
+    {
+      "name": "🛒 Günlük Sandık & Mağaza",
+      "short_name": "Mağaza",
+      "description": "Ücretsiz günlük ödülünü al",
+      "url": "/shop",
+      "icons": [{ "src": "/pwa-icon.svg", "sizes": "192x192" }]
+    }
+  ]
+}

@@ -1,4 +1,4 @@
-export type MobileTab = 'arena' | 'duello' | 'klan' | 'pratik' | 'magaza' | 'profil';
+export type MobileTab = 'arena' | 'duello' | 'klan' | 'pratik' | 'magaza' | 'profil' | 'liderlik';
 
 interface MobileBottomNavProps {
   activeTab: MobileTab;

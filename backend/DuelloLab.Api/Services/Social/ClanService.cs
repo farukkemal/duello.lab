@@ -211,6 +211,77 @@ public class ClanService : IClanService
         }).ToList();
     }
 
+    public async Task<List<ClanMessageDto>> GetClanMessagesAsync(Guid userId, Guid clanId, int limit = 50)
+    {
+        // Verify user is a member of this clan
+        var isMember = await _db.ClanMembers.AnyAsync(cm => cm.ClanId == clanId && cm.UserId == userId);
+        if (!isMember)
+            throw new UnauthorizedAccessException("Bu klanın mesajlarını görmek için klan üyesi olmalısınız.");
+
+        var messages = await _db.ClanMessages
+            .Where(m => m.ClanId == clanId)
+            .OrderByDescending(m => m.CreatedAt)
+            .Take(limit)
+            .ToListAsync();
+
+        return messages
+            .OrderBy(m => m.CreatedAt)
+            .Select(m => new ClanMessageDto
+            {
+                Id = m.Id,
+                ClanId = m.ClanId,
+                UserId = m.UserId,
+                Username = m.Username,
+                UserLevel = m.UserLevel,
+                Role = m.Role,
+                Content = m.Content,
+                IsSystem = m.IsSystem,
+                CreatedAt = m.CreatedAt
+            })
+            .ToList();
+    }
+
+    public async Task<ClanMessageDto> SendClanMessageAsync(Guid userId, Guid clanId, string content)
+    {
+        if (string.IsNullOrWhiteSpace(content))
+            throw new ArgumentException("Mesaj boş olamaz.");
+
+        var member = await _db.ClanMembers.FirstOrDefaultAsync(cm => cm.ClanId == clanId && cm.UserId == userId);
+        if (member == null)
+            throw new UnauthorizedAccessException("Yalnızca klan üyeleri sohbet edebilir.");
+
+        var clanMessage = new ClanMessage
+        {
+            ClanId = clanId,
+            UserId = userId,
+            Username = member.Username,
+            UserLevel = member.Level,
+            Role = member.Role,
+            Content = content.Trim(),
+            IsSystem = false,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        _db.ClanMessages.Add(clanMessage);
+        await _db.SaveChangesAsync();
+
+        _logger.LogInformation("💬 [ClanChat] User {Username} sent message to Clan {ClanId}: {Content}",
+            member.Username, clanId, content);
+
+        return new ClanMessageDto
+        {
+            Id = clanMessage.Id,
+            ClanId = clanMessage.ClanId,
+            UserId = clanMessage.UserId,
+            Username = clanMessage.Username,
+            UserLevel = clanMessage.UserLevel,
+            Role = clanMessage.Role,
+            Content = clanMessage.Content,
+            IsSystem = clanMessage.IsSystem,
+            CreatedAt = clanMessage.CreatedAt
+        };
+    }
+
     private async Task<ClanDto> MapToClanDto(Clan clan)
     {
         var rank = await _db.Clans.CountAsync(c => c.TotalXp > clan.TotalXp) + 1;

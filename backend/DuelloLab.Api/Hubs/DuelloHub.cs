@@ -579,4 +579,18 @@ public class DuelloHub : Hub
         var code = roomCode.ToUpper().Trim();
         return await _roomService.GetRoomLeaderboardAsync(code);
     }
+
+    public async Task JoinClanChat(string clanId)
+    {
+        var groupName = $"clan_{clanId.ToLower().Trim()}";
+        await Groups.AddToGroupAsync(Context.ConnectionId, groupName);
+        _logger.LogInformation("💬 [SignalR] Client {ConnectionId} joined Clan Chat group {GroupName}", Context.ConnectionId, groupName);
+    }
+
+    public async Task LeaveClanChat(string clanId)
+    {
+        var groupName = $"clan_{clanId.ToLower().Trim()}";
+        await Groups.RemoveFromGroupAsync(Context.ConnectionId, groupName);
+        _logger.LogInformation("💬 [SignalR] Client {ConnectionId} left Clan Chat group {GroupName}", Context.ConnectionId, groupName);
+    }
 }

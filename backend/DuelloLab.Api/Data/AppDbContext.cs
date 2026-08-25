@@ -14,6 +14,7 @@ public class AppDbContext : DbContext
     public DbSet<UserResult> UserResults => Set<UserResult>();
     public DbSet<Clan> Clans => Set<Clan>();
     public DbSet<ClanMember> ClanMembers => Set<ClanMember>();
+    public DbSet<ClanMessage> ClanMessages => Set<ClanMessage>();
     public DbSet<Friendship> Friendships => Set<Friendship>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -96,6 +97,23 @@ public class AppDbContext : DbContext
 
             entity.HasOne(cm => cm.Clan)
                 .WithMany(c => c.Members)
+                .HasForeignKey(cm => cm.ClanId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(cm => cm.User)
+                .WithMany()
+                .HasForeignKey(cm => cm.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ClanMessage configuration
+        modelBuilder.Entity<ClanMessage>(entity =>
+        {
+            entity.HasIndex(cm => new { cm.ClanId, cm.CreatedAt });
+            entity.Property(cm => cm.Content).HasMaxLength(500).IsRequired();
+
+            entity.HasOne(cm => cm.Clan)
+                .WithMany()
                 .HasForeignKey(cm => cm.ClanId)
                 .OnDelete(DeleteBehavior.Cascade);
 

@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSignalR } from '../contexts/SignalRContext';
+import { showLocalNotification } from '../utils/notifications';
+import { playVictorySound } from '../utils/audio';
 
 interface DuelInvitePayload {
   inviteId: string;
@@ -28,6 +30,12 @@ export default function GlobalDuelInviteModal() {
 
     const handleInviteReceived = (data: DuelInvitePayload) => {
       setInvite(data);
+      playVictorySound();
+      showLocalNotification(`⚔️ ${data.fromUsername} seni düelloya çağırdı!`, {
+        body: `${data.category} kategorisinde 1v1 maç daveti. Hemen katıl!`,
+        roomCode: data.roomCode,
+        url: `/lobby/${data.roomCode}`
+      });
     };
 
     const handleInviteAccepted = (data: { roomCode: string; opponentUsername: string }) => {

@@ -19,7 +19,6 @@ export default function ShopPage() {
 
   const [products, setProducts] = useState<StoreProduct[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<MobileTab>('duello'); // Will handle tab routing
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -45,7 +44,7 @@ export default function ShopPage() {
       await buyCoinPack(product.id);
       await refreshUser();
       triggerLevelUpConfetti();
-      showToast(`🎉 +${product.CoinAmount + product.BonusCoins} Coin cüzdanınıza eklendi!`);
+      showToast(`🎉 +${product.coinAmount + product.bonusCoins} Coin cüzdanınıza eklendi!`);
     } catch (e: any) {
       alert(e.response?.data?.error || 'Satın alma işlemi başarısız.');
     } finally {
@@ -160,10 +159,16 @@ export default function ShopPage() {
               <span className="text-[10px] text-slate-400 font-mono">Bakiye: {user?.coinBalance} 💰</span>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              {coinPacks.map((pack) => {
-                const isProcessing = processingId === pack.id;
-                const totalCoins = pack.coinAmount + pack.bonusCoins;
+            {loading ? (
+              <div className="py-8 text-center text-xs font-bold text-slate-400 flex items-center justify-center gap-2">
+                <span className="w-4 h-4 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
+                Mağaza ürünleri yükleniyor...
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-3">
+                {coinPacks.map((pack) => {
+                  const isProcessing = processingId === pack.id;
+                  const totalCoins = pack.coinAmount + pack.bonusCoins;
 
                 return (
                   <div
@@ -202,6 +207,7 @@ export default function ShopPage() {
                 );
               })}
             </div>
+            )}
           </div>
 
           {/* 3. ITEMS & POWERUPS SECTION */}

@@ -8,9 +8,10 @@ export default function LiveStatusBadge() {
       case 'connected':
         return 'bg-emerald-500 text-emerald-400 border-emerald-500/30';
       case 'connecting':
+      case 'reconnecting':
         return 'bg-amber-500 text-amber-400 border-amber-500/30';
       case 'disconnected':
-      case 'error':
+      default:
         return 'bg-rose-500 text-rose-400 border-rose-500/30';
     }
   };
@@ -20,9 +21,10 @@ export default function LiveStatusBadge() {
       case 'connected':
         return 'bg-emerald-400 animate-ping';
       case 'connecting':
+      case 'reconnecting':
         return 'bg-amber-400 animate-pulse';
       case 'disconnected':
-      case 'error':
+      default:
         return 'bg-rose-500';
     }
   };

@@ -194,6 +194,18 @@ if (app.Environment.IsDevelopment())
             ""UpdatedAt"" timestamptz NULL,
             CONSTRAINT ""UQ_Friendship"" UNIQUE (""RequesterId"", ""AddresseeId"")
         );
+
+        CREATE TABLE IF NOT EXISTS ""ClanMessages"" (
+            ""Id"" uuid PRIMARY KEY,
+            ""ClanId"" uuid NOT NULL REFERENCES ""Clans""(""Id"") ON DELETE CASCADE,
+            ""UserId"" uuid NOT NULL REFERENCES ""Users""(""Id"") ON DELETE CASCADE,
+            ""Username"" varchar(50) NOT NULL DEFAULT '',
+            ""UserLevel"" integer NOT NULL DEFAULT 1,
+            ""Role"" integer NOT NULL DEFAULT 0,
+            ""Content"" varchar(500) NOT NULL DEFAULT '',
+            ""IsSystem"" boolean NOT NULL DEFAULT false,
+            ""CreatedAt"" timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
     ");
 
     await ExamSeeder.SeedAsync(

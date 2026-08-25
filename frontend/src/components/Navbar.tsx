@@ -1,12 +1,11 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { claimCoins } from '../api/rooms';
 import LiveStatusBadge from './LiveStatusBadge';
 
 export default function Navbar() {
   const { user, logout, refreshUser } = useAuth();
-  const navigate = useNavigate();
   const [claiming, setClaiming] = useState(false);
   const [claimToast, setClaimToast] = useState(false);
 

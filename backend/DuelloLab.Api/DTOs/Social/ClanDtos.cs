@@ -63,3 +63,24 @@ public class ClanListItemDto
     public int MemberCount { get; set; }
     public int Rank { get; set; }
 }
+
+public class ClanMessageDto
+{
+    public Guid Id { get; set; }
+    public Guid ClanId { get; set; }
+    public Guid UserId { get; set; }
+    public string Username { get; set; } = string.Empty;
+    public int UserLevel { get; set; }
+    public ClanRole Role { get; set; }
+    public string Content { get; set; } = string.Empty;
+    public bool IsSystem { get; set; }
+    public DateTime CreatedAt { get; set; }
+}
+
+public class SendClanMessageDto
+{
+    [Required]
+    [MaxLength(500)]
+    public string Content { get; set; } = string.Empty;
+}
+

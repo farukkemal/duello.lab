@@ -18,7 +18,6 @@ import { triggerPodiumConfetti } from '../utils/confetti';
 import {
   playCountdownTick,
   playCountdownGo,
-  playCorrectSound,
   playWrongSound,
   playVictorySound
 } from '../utils/audio';
@@ -52,7 +51,7 @@ export default function LobbyPage() {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string | null>>({});
   const [playerProgressMap, setPlayerProgressMap] = useState<Record<string, PlayerProgressData>>({});
-  const [matchStartTime, setMatchStartTime] = useState<Date | null>(null);
+  const [, setMatchStartTime] = useState<Date | null>(null);
   const [matchDurationSeconds, setMatchDurationSeconds] = useState(225);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [submitting, setSubmitting] = useState(false);
@@ -68,7 +67,6 @@ export default function LobbyPage() {
 
   // UI state
   const [copiedCode, setCopiedCode] = useState(false);
-  const [copiedLink, setCopiedLink] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [showReviewModal, setShowReviewModal] = useState(false);
 
