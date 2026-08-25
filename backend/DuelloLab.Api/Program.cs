@@ -148,83 +148,97 @@ app.UseAuthorization();
 app.MapControllers();
 app.MapHub<DuelloHub>("/hubs/duello");
 
-// Development ortamında örnek TYT sorularını veritabanına ekle.
-if (app.Environment.IsDevelopment())
+// Health check endpoint for Render and browser verification
+app.MapGet("/", () => Results.Ok(new 
+{ 
+    status = "healthy", 
+    service = "DuelloLab API", 
+    version = "1.0.0", 
+    time = DateTime.UtcNow 
+}));
+
+// Initialize database tables and seeds (both Dev and Prod on first boot)
+using (var scope = app.Services.CreateScope())
 {
-    using var scope = app.Services.CreateScope();
-
-    var db = scope.ServiceProvider
-        .GetRequiredService<AppDbContext>();
-
-    // Ensure Clans, ClanMembers, Friendships tables exist
-    await db.Database.ExecuteSqlRawAsync(@"
-        CREATE TABLE IF NOT EXISTS ""Clans"" (
-            ""Id"" uuid PRIMARY KEY,
-            ""Name"" varchar(50) NOT NULL UNIQUE,
-            ""Description"" varchar(200) NOT NULL DEFAULT '',
-            ""Tag"" varchar(6) NOT NULL DEFAULT 'YKS',
-            ""BadgeIcon"" varchar(10) NOT NULL DEFAULT '🛡️',
-            ""MinLevel"" integer NOT NULL DEFAULT 1,
-            ""IsOpen"" boolean NOT NULL DEFAULT true,
-            ""LeaderUserId"" uuid NOT NULL,
-            ""LeaderUsername"" varchar(50) NOT NULL DEFAULT '',
-            ""TotalXp"" integer NOT NULL DEFAULT 0,
-            ""MemberCount"" integer NOT NULL DEFAULT 1,
-            ""CreatedAt"" timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
-        );
-
-        CREATE TABLE IF NOT EXISTS ""ClanMembers"" (
-            ""Id"" uuid PRIMARY KEY,
-            ""ClanId"" uuid NOT NULL REFERENCES ""Clans""(""Id"") ON DELETE CASCADE,
-            ""UserId"" uuid NOT NULL REFERENCES ""Users""(""Id"") ON DELETE CASCADE,
-            ""Username"" varchar(50) NOT NULL DEFAULT '',
-            ""Level"" integer NOT NULL DEFAULT 1,
-            ""XpContributed"" integer NOT NULL DEFAULT 0,
-            ""Role"" integer NOT NULL DEFAULT 0,
-            ""JoinedAt"" timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            CONSTRAINT ""UQ_ClanMember"" UNIQUE (""ClanId"", ""UserId"")
-        );
-
-        CREATE TABLE IF NOT EXISTS ""Friendships"" (
-            ""Id"" uuid PRIMARY KEY,
-            ""RequesterId"" uuid NOT NULL REFERENCES ""Users""(""Id"") ON DELETE CASCADE,
-            ""AddresseeId"" uuid NOT NULL REFERENCES ""Users""(""Id"") ON DELETE CASCADE,
-            ""Status"" integer NOT NULL DEFAULT 0,
-            ""CreatedAt"" timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            ""UpdatedAt"" timestamptz NULL,
-            CONSTRAINT ""UQ_Friendship"" UNIQUE (""RequesterId"", ""AddresseeId"")
-        );
-
-        CREATE TABLE IF NOT EXISTS ""ClanMessages"" (
-            ""Id"" uuid PRIMARY KEY,
-            ""ClanId"" uuid NOT NULL REFERENCES ""Clans""(""Id"") ON DELETE CASCADE,
-            ""UserId"" uuid NOT NULL REFERENCES ""Users""(""Id"") ON DELETE CASCADE,
-            ""Username"" varchar(50) NOT NULL DEFAULT '',
-            ""UserLevel"" integer NOT NULL DEFAULT 1,
-            ""Role"" integer NOT NULL DEFAULT 0,
-            ""Content"" varchar(500) NOT NULL DEFAULT '',
-            ""IsSystem"" boolean NOT NULL DEFAULT false,
-            ""CreatedAt"" timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
-        );
-    ");
-
-    await ExamSeeder.SeedAsync(
-        db,
-        app.Environment.ContentRootPath);
-
-    // Ensure Role and IsBanned columns exist on Users table
-    await db.Database.ExecuteSqlRawAsync(@"
-        ALTER TABLE ""Users"" ADD COLUMN IF NOT EXISTS ""Role"" varchar(20) NOT NULL DEFAULT 'User';
-        ALTER TABLE ""Users"" ADD COLUMN IF NOT EXISTS ""IsBanned"" boolean NOT NULL DEFAULT false;
-    ");
-
-    // Seed founder accounts as Admin (add/remove usernames as needed)
-    var founders = new[] { "meteogr", "farukkemal" };
-    foreach (var username in founders)
+    try
     {
-        await db.Database.ExecuteSqlRawAsync(
-            @"UPDATE ""Users"" SET ""Role"" = 'Admin' WHERE ""Username"" = {0}",
-            username);
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        // Ensure database tables exist
+        await db.Database.EnsureCreatedAsync();
+
+        // Ensure Clans, ClanMembers, Friendships, ClanMessages tables exist
+        await db.Database.ExecuteSqlRawAsync(@"
+            CREATE TABLE IF NOT EXISTS ""Clans"" (
+                ""Id"" uuid PRIMARY KEY,
+                ""Name"" varchar(50) NOT NULL UNIQUE,
+                ""Description"" varchar(200) NOT NULL DEFAULT '',
+                ""Tag"" varchar(6) NOT NULL DEFAULT 'YKS',
+                ""BadgeIcon"" varchar(10) NOT NULL DEFAULT '🛡️',
+                ""MinLevel"" integer NOT NULL DEFAULT 1,
+                ""IsOpen"" boolean NOT NULL DEFAULT true,
+                ""LeaderUserId"" uuid NOT NULL,
+                ""LeaderUsername"" varchar(50) NOT NULL DEFAULT '',
+                ""TotalXp"" integer NOT NULL DEFAULT 0,
+                ""MemberCount"" integer NOT NULL DEFAULT 1,
+                ""CreatedAt"" timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS ""ClanMembers"" (
+                ""Id"" uuid PRIMARY KEY,
+                ""ClanId"" uuid NOT NULL REFERENCES ""Clans""(""Id"") ON DELETE CASCADE,
+                ""UserId"" uuid NOT NULL REFERENCES ""Users""(""Id"") ON DELETE CASCADE,
+                ""Username"" varchar(50) NOT NULL DEFAULT '',
+                ""Level"" integer NOT NULL DEFAULT 1,
+                ""XpContributed"" integer NOT NULL DEFAULT 0,
+                ""Role"" integer NOT NULL DEFAULT 0,
+                ""JoinedAt"" timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT ""UQ_ClanMember"" UNIQUE (""ClanId"", ""UserId"")
+            );
+
+            CREATE TABLE IF NOT EXISTS ""Friendships"" (
+                ""Id"" uuid PRIMARY KEY,
+                ""RequesterId"" uuid NOT NULL REFERENCES ""Users""(""Id"") ON DELETE CASCADE,
+                ""AddresseeId"" uuid NOT NULL REFERENCES ""Users""(""Id"") ON DELETE CASCADE,
+                ""Status"" integer NOT NULL DEFAULT 0,
+                ""CreatedAt"" timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                ""UpdatedAt"" timestamptz NULL,
+                CONSTRAINT ""UQ_Friendship"" UNIQUE (""RequesterId"", ""AddresseeId"")
+            );
+
+            CREATE TABLE IF NOT EXISTS ""ClanMessages"" (
+                ""Id"" uuid PRIMARY KEY,
+                ""ClanId"" uuid NOT NULL REFERENCES ""Clans""(""Id"") ON DELETE CASCADE,
+                ""UserId"" uuid NOT NULL REFERENCES ""Users""(""Id"") ON DELETE CASCADE,
+                ""Username"" varchar(50) NOT NULL DEFAULT '',
+                ""UserLevel"" integer NOT NULL DEFAULT 1,
+                ""Role"" integer NOT NULL DEFAULT 0,
+                ""Content"" varchar(500) NOT NULL DEFAULT '',
+                ""IsSystem"" boolean NOT NULL DEFAULT false,
+                ""CreatedAt"" timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+
+            ALTER TABLE ""Users"" ADD COLUMN IF NOT EXISTS ""Role"" varchar(20) NOT NULL DEFAULT 'User';
+            ALTER TABLE ""Users"" ADD COLUMN IF NOT EXISTS ""IsBanned"" boolean NOT NULL DEFAULT false;
+        ");
+
+        if (app.Environment.IsDevelopment())
+        {
+            await ExamSeeder.SeedAsync(db, app.Environment.ContentRootPath);
+        }
+
+        // Seed founder accounts as Admin
+        var founders = new[] { "meteogr", "farukkemal" };
+        foreach (var username in founders)
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                @"UPDATE ""Users"" SET ""Role"" = 'Admin' WHERE ""Username"" = {0}",
+                username);
+        }
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"[Startup] Database init note: {ex.Message}");
     }
 }
 

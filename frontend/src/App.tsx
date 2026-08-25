@@ -14,28 +14,30 @@ import AdminPage from './pages/AdminPage';
 import GlobalDuelInviteModal from './components/GlobalDuelInviteModal';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
-  const { token, isLoading } = useAuth();
+  const { token, user, isLoading } = useAuth();
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-[var(--color-text-muted)]">Yükleniyor...</div>
+      <div className="min-h-screen flex items-center justify-center bg-[#060710]">
+        <div className="text-violet-400 font-bold text-sm flex items-center gap-2">
+          <span className="w-4 h-4 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
+          Yükleniyor...
+        </div>
       </div>
     );
   }
-  return token ? <>{children}</> : <Navigate to="/login" replace />;
+  return token && user ? <>{children}</> : <Navigate to="/login" replace />;
 }
 
 function PublicRoute({ children }: { children: React.ReactNode }) {
-  const { token, isLoading } = useAuth();
+  const { token, user, isLoading } = useAuth();
   if (isLoading) return null;
-  return token ? <Navigate to="/dashboard" replace /> : <>{children}</>;
+  return token && user ? <Navigate to="/dashboard" replace /> : <>{children}</>;
 }
 
 function AdminRoute({ children }: { children: React.ReactNode }) {
   const { token, user, isLoading } = useAuth();
   if (isLoading) return null;
-  if (!token) return <Navigate to="/login" replace />;
-  if (!user) return null;
+  if (!token || !user) return <Navigate to="/login" replace />;
   if (user.role !== 'Admin') return <Navigate to="/dashboard" replace />;
   return <>{children}</>;
 }
@@ -43,6 +45,7 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
 function AppRoutes() {
   return (
     <Routes>
+      <Route path="/" element={<PublicRoute><LoginPage /></PublicRoute>} />
       <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
       <Route path="/register" element={<PublicRoute><RegisterPage /></PublicRoute>} />
       <Route path="/dashboard" element={<PrivateRoute><DashboardPage /></PrivateRoute>} />
@@ -52,7 +55,7 @@ function AppRoutes() {
       <Route path="/lobby/:roomCode" element={<PrivateRoute><LobbyPage /></PrivateRoute>} />
       <Route path="/results/:resultId" element={<PrivateRoute><ResultPage /></PrivateRoute>} />
       <Route path="/admin" element={<AdminRoute><AdminPage /></AdminRoute>} />
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }

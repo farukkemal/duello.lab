@@ -87,7 +87,16 @@ export default function DashboardPage() {
     }
   }, [activeTab, aiReport, aiLoading]);
 
-  if (!user) return null;
+  if (!user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#060710]">
+        <div className="text-violet-400 font-bold text-sm flex items-center gap-2">
+          <span className="w-4 h-4 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
+          Kullanıcı profili yükleniyor...
+        </div>
+      </div>
+    );
+  }
 
   const xpCurrent = user.xp % 1000;
   const xpPercent = Math.min(100, Math.round((xpCurrent / 1000) * 100));
