@@ -46,7 +46,10 @@ export function SignalRProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    const hubUrl = '/hubs/duello';
+    const apiBase = import.meta.env.VITE_API_URL 
+      ? import.meta.env.VITE_API_URL.replace(/\/$/, '')
+      : '';
+    const hubUrl = `${apiBase}/hubs/duello`;
 
     const newConnection = new signalR.HubConnectionBuilder()
       .withUrl(hubUrl, {
