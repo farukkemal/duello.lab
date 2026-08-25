@@ -13,9 +13,16 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<UserDto | null>(null);
-  const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
-  const [isLoading, setIsLoading] = useState(true);
+  const [user, setUser] = useState<UserDto | null>(() => {
+    try {
+      const saved = localStorage.getItem('user');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [token, setToken] = useState<string | null>(() => localStorage.getItem('token'));
+  const [isLoading, setIsLoading] = useState(false);
 
   const setAuth = (newToken: string, newUser: UserDto) => {
     localStorage.setItem('token', newToken);
@@ -33,21 +40,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refreshUser = async () => {
     try {
+      setIsLoading(true);
       const { data } = await getMe();
       setUser(data);
       localStorage.setItem('user', JSON.stringify(data));
-    } catch {
-      logout();
+    } catch (err: any) {
+      if (err?.response?.status === 401) {
+        logout();
+      }
+    } finally {
+      setIsLoading(false);
     }
   };
 
   useEffect(() => {
     if (token) {
-      refreshUser().finally(() => setIsLoading(false));
-    } else {
-      setIsLoading(false);
+      refreshUser();
     }
-  }, []);
+  }, [token]);
 
   return (
     <AuthContext.Provider value={{ user, token, setAuth, logout, refreshUser, isLoading }}>

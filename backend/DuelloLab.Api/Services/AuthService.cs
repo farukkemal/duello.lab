@@ -18,17 +18,35 @@ public class AuthService : IAuthService
 
     public async Task<AuthResponseDto> RegisterAsync(RegisterDto dto)
     {
-        if (await _db.Users.AnyAsync(u => u.Username == dto.Username))
-            throw new InvalidOperationException("Username already exists.");
+        var username = (dto.Username ?? string.Empty).Trim();
+        var email = (dto.Email ?? string.Empty).Trim().ToLower();
+        var password = dto.Password ?? string.Empty;
 
-        if (await _db.Users.AnyAsync(u => u.Email == dto.Email))
-            throw new InvalidOperationException("Email already exists.");
+        if (string.IsNullOrWhiteSpace(username) || username.Length < 3)
+            throw new InvalidOperationException("Kullanıcı adı en az 3 karakter olmalıdır.");
+
+        if (string.IsNullOrWhiteSpace(email) || !email.Contains('@'))
+            throw new InvalidOperationException("Geçerli bir e-posta adresi giriniz.");
+
+        if (string.IsNullOrWhiteSpace(password) || password.Length < 6)
+            throw new InvalidOperationException("Şifre en az 6 karakter olmalıdır.");
+
+        if (await _db.Users.AnyAsync(u => u.Username.ToLower() == username.ToLower()))
+            throw new InvalidOperationException("Bu kullanıcı adı zaten alınmış. Lütfen başka bir kullanıcı adı seçin.");
+
+        if (await _db.Users.AnyAsync(u => u.Email.ToLower() == email))
+            throw new InvalidOperationException("Bu e-posta adresi ile zaten kayıt olunmuş. Lütfen giriş yapın.");
 
         var user = new User
         {
-            Username = dto.Username,
-            Email = dto.Email,
-            PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password)
+            Username = username,
+            Email = email,
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword(password),
+            CoinBalance = 100,
+            Level = 1,
+            XP = 0,
+            CreatedAt = DateTime.UtcNow,
+            Role = "User"
         };
 
         _db.Users.Add(user);
@@ -43,11 +61,19 @@ public class AuthService : IAuthService
 
     public async Task<AuthResponseDto> LoginAsync(LoginDto dto)
     {
-        var user = await _db.Users.FirstOrDefaultAsync(u => u.Username == dto.Username)
-            ?? throw new InvalidOperationException("Invalid username or password.");
+        var identifier = (dto.Username ?? string.Empty).Trim().ToLower();
+        var password = dto.Password ?? string.Empty;
 
-        if (!BCrypt.Net.BCrypt.Verify(dto.Password, user.PasswordHash))
-            throw new InvalidOperationException("Invalid username or password.");
+        if (string.IsNullOrWhiteSpace(identifier) || string.IsNullOrWhiteSpace(password))
+            throw new InvalidOperationException("Lütfen kullanıcı adı / e-posta ve şifrenizi giriniz.");
+
+        var user = await _db.Users.FirstOrDefaultAsync(u => 
+            u.Username.ToLower() == identifier || 
+            u.Email.ToLower() == identifier)
+            ?? throw new InvalidOperationException("Kullanıcı adı / e-posta veya şifre hatalı.");
+
+        if (!BCrypt.Net.BCrypt.Verify(password, user.PasswordHash))
+            throw new InvalidOperationException("Kullanıcı adı / e-posta veya şifre hatalı.");
 
         if (user.IsBanned)
             throw new InvalidOperationException("Bu hesap askıya alınmış. Detaylar için yöneticiyle iletişime geçin.");

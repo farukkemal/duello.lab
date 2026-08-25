@@ -80,11 +80,11 @@ export default function LoginPage() {
           <form onSubmit={handleSubmit} className="space-y-3.5">
             <div>
               <label className="block text-[10px] font-black text-slate-300 mb-1 uppercase tracking-wider">
-                Kullanıcı Adı
+                Kullanıcı Adı veya E-posta
               </label>
               <input
                 type="text"
-                placeholder="örn: duello_ustasi"
+                placeholder="örn: duello_ustasi veya mail@ornek.com"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 className="w-full bg-[#10132b] border border-white/10 rounded-xl px-3.5 py-3 text-white text-xs font-bold focus:outline-none focus:border-violet-500 transition"
