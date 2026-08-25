@@ -51,7 +51,7 @@ export default function DesktopNavbar({ activeTab, onSelectTab }: DesktopNavbarP
     setMuted(newMuted);
   };
 
-  const xpCurrent = user.xp % 1000;
+  const xpCurrent = (user?.xp ?? 0) % 1000;
   const xpPercent = Math.min(100, Math.round((xpCurrent / 1000) * 100));
 
   const navItems: { id: MobileTab; label: string; icon: string; path?: string; badge?: string }[] = [
@@ -171,7 +171,7 @@ export default function DesktopNavbar({ activeTab, onSelectTab }: DesktopNavbarP
             >
               <span className="text-base">💰</span>
               <span className="font-mono font-black text-amber-300 text-xs sm:text-sm whitespace-nowrap">
-                {user.coinBalance.toLocaleString()}
+                {(user?.coinBalance ?? 0).toLocaleString()}
               </span>
 
               <button

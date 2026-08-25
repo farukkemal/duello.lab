@@ -74,7 +74,7 @@ export default function Navbar() {
               <div className="flex items-center gap-1.5 bg-[var(--color-surface)] border border-amber-500/30 px-3 py-1.5 rounded-xl shadow-inner">
                 <span className="text-sm animate-pulse">💰</span>
                 <span className="font-mono font-bold text-amber-300 text-sm">
-                  {user.coinBalance.toLocaleString()}
+                  {(user?.coinBalance ?? 0).toLocaleString()}
                 </span>
                 <button
                   onClick={handleClaim}

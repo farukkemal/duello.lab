@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -15,7 +15,7 @@ function StatCard({ icon, label, value, sub }: { icon: string; label: string; va
   return (
     <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-5 flex flex-col gap-1">
       <div className="text-2xl">{icon}</div>
-      <div className="text-3xl font-bold text-[var(--color-text)]">{value.toLocaleString()}</div>
+      <div className="text-3xl font-bold text-[var(--color-text)]">{typeof value === 'number' ? (value ?? 0).toLocaleString() : (value || '0')}</div>
       <div className="text-sm font-semibold text-[var(--color-text-muted)]">{label}</div>
       {sub && <div className="text-xs text-[var(--color-text-muted)]">{sub}</div>}
     </div>
@@ -149,9 +149,9 @@ function UsersTab() {
                     <div className="font-semibold text-[var(--color-text)]">{u.username}</div>
                     <div className="text-xs text-[var(--color-text-muted)]">{u.email}</div>
                   </td>
-                  <td className="px-4 py-3 text-[var(--color-text)]">{u.level}</td>
-                  <td className="px-4 py-3 text-[var(--color-text)]">{u.xp.toLocaleString()}</td>
-                  <td className="px-4 py-3 text-[var(--color-text)]">{u.coinBalance.toLocaleString()}</td>
+                  <td className="px-4 py-3 text-[var(--color-text)]">{u.level ?? 1}</td>
+                  <td className="px-4 py-3 text-[var(--color-text)]">{(u?.xp ?? 0).toLocaleString()}</td>
+                  <td className="px-4 py-3 text-[var(--color-text)]">{(u?.coinBalance ?? 0).toLocaleString()}</td>
                   <td className="px-4 py-3">
                     <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${u.role === 'Admin' ? 'bg-amber-500/20 text-amber-400' : 'bg-[var(--color-surface)] text-[var(--color-text-muted)]'}`}>
                       {u.role === 'Admin' ? '👑 Admin' : '👤 Kullanıcı'}

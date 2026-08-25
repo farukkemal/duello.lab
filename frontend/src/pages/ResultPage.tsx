@@ -84,7 +84,7 @@ export default function ResultPage() {
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-400">Milisaniye (Tie-Breaker):</span>
-                <span className="font-bold text-cyan-400 font-mono">{result.durationMs.toLocaleString()} ms</span>
+                <span className="font-bold text-cyan-400 font-mono">{(result?.durationMs ?? 0).toLocaleString()} ms</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-400">Kazanılan Tecrübe:</span>

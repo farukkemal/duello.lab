@@ -619,7 +619,7 @@ export default function ClanPage() {
                         <div className="grid grid-cols-3 gap-2 pt-2">
                           <div className="bg-black/30 rounded-xl p-2 border border-white/5">
                             <div className="text-[9px] text-slate-400 font-bold">Toplam XP</div>
-                            <div className="text-sm font-mono font-black text-cyan-400">{myClan.totalXp.toLocaleString()}</div>
+                            <div className="text-sm font-mono font-black text-cyan-400">{(myClan?.totalXp ?? 0).toLocaleString()}</div>
                           </div>
                           <div className="bg-black/30 rounded-xl p-2 border border-white/5">
                             <div className="text-[9px] text-slate-400 font-bold">Üye Sayısı</div>
@@ -745,7 +745,7 @@ export default function ClanPage() {
                           </span>
                         </div>
                         <div className="text-[10px] text-slate-400 mt-0.5">
-                          {c.memberCount} Üye • {c.totalXp.toLocaleString()} XP • Min. Lv.{c.minLevel}
+                          {c.memberCount} Üye • {(c?.totalXp ?? 0).toLocaleString()} XP • Min. Lv.{c.minLevel}
                         </div>
                       </div>
                     </div>
@@ -753,9 +753,14 @@ export default function ClanPage() {
                     {!myClan && (
                       <button
                         onClick={() => handleJoinClan(c.id)}
-                        className="px-3.5 py-2 rounded-xl btn-game-success text-white font-black text-xs uppercase cursor-pointer active:scale-95"
+                        disabled={user.level < c.minLevel || joiningClanId === c.id}
+                        className={`px-3 py-1.5 rounded-xl font-bold text-xs uppercase transition cursor-pointer disabled:opacity-40 ${
+                          user.level >= c.minLevel
+                            ? 'btn-game-primary text-white'
+                            : 'bg-slate-800 text-slate-500 border border-white/5'
+                        }`}
                       >
-                        Katıl
+                        {joiningClanId === c.id ? '...' : user.level < c.minLevel ? `Lv.${c.minLevel} Gerekli` : 'Katıl'}
                       </button>
                     )}
                   </div>
@@ -803,7 +808,7 @@ export default function ClanPage() {
                   </div>
 
                   <div className="text-right font-mono font-black text-amber-300 text-xs">
-                    {c.totalXp.toLocaleString()} XP
+                    {(c?.totalXp ?? 0).toLocaleString()} XP
                   </div>
                 </div>
               ))}

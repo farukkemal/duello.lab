@@ -46,7 +46,7 @@ export default function DesktopArenaView({
 
   if (!user) return null;
 
-  const xpCurrent = user.xp % 1000;
+  const xpCurrent = (user?.xp ?? 0) % 1000;
   const xpPercent = Math.min(100, Math.round((xpCurrent / 1000) * 100));
 
   return (
@@ -101,7 +101,7 @@ export default function DesktopArenaView({
               </div>
               <div className="bg-black/30 p-2 rounded-xl border border-white/5">
                 <div className="text-[9px] text-slate-400 font-bold">💰 Bakiye</div>
-                <div className="text-sm font-mono font-black text-amber-400">{user.coinBalance.toLocaleString()}</div>
+                <div className="text-sm font-mono font-black text-amber-400">{(user?.coinBalance ?? 0).toLocaleString()}</div>
               </div>
             </div>
 

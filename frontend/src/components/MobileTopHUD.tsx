@@ -46,7 +46,7 @@ export default function MobileTopHUD({ onOpenProfile }: MobileTopHUDProps) {
     setMuted(newMuted);
   };
 
-  const xpCurrent = user.xp % 1000;
+  const xpCurrent = (user?.xp ?? 0) % 1000;
   const xpPercent = Math.min(100, Math.round((xpCurrent / 1000) * 100));
 
   const handleProfileClick = () => {
@@ -121,7 +121,7 @@ export default function MobileTopHUD({ onOpenProfile }: MobileTopHUDProps) {
           >
             <span className="text-xs">💰</span>
             <span className="font-mono font-black text-amber-300 text-xs">
-              {user.coinBalance.toLocaleString()}
+              {(user?.coinBalance ?? 0).toLocaleString()}
             </span>
 
             <button

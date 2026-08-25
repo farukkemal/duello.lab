@@ -140,7 +140,7 @@ export default function ShopPage() {
               <span className="text-2xl">💰</span>
               <div>
                 <div className="text-[10px] text-slate-400 font-bold uppercase">Mevcut Bakiye</div>
-                <div className="text-lg font-mono font-black text-amber-300">{user?.coinBalance.toLocaleString()} Coin</div>
+                <div className="text-lg font-mono font-black text-amber-300">{(user?.coinBalance ?? 0).toLocaleString()} Coin</div>
               </div>
             </div>
           </div>
@@ -370,7 +370,7 @@ export default function ShopPage() {
               <h3 className="text-sm font-black text-white uppercase tracking-wider flex items-center gap-1.5">
                 <span>🪙</span> <span>Coin Paketleri</span>
               </h3>
-              <span className="text-[10px] text-slate-400 font-mono">Bakiye: {user?.coinBalance} 💰</span>
+              <span className="text-[10px] text-slate-400 font-mono">Bakiye: {(user?.coinBalance ?? 0).toLocaleString()} 💰</span>
             </div>
 
             {loading ? (

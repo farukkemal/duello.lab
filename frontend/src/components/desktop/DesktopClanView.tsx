@@ -77,7 +77,7 @@ export default function DesktopClanView({
             <div className="grid grid-cols-3 gap-2 pt-2">
               <div className="bg-black/30 rounded-xl p-2 border border-white/5">
                 <div className="text-[10px] text-slate-400 font-bold">Toplam XP</div>
-                <div className="text-sm font-mono font-black text-cyan-400">{myClan.totalXp.toLocaleString()}</div>
+                <div className="text-sm font-mono font-black text-cyan-400">{(myClan?.totalXp ?? 0).toLocaleString()}</div>
               </div>
               <div className="bg-black/30 rounded-xl p-2 border border-white/5">
                 <div className="text-[10px] text-slate-400 font-bold">Üye Sayısı</div>

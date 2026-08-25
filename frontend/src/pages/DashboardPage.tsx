@@ -98,7 +98,7 @@ export default function DashboardPage() {
     );
   }
 
-  const xpCurrent = user.xp % 1000;
+  const xpCurrent = (user?.xp ?? 0) % 1000;
   const xpPercent = Math.min(100, Math.round((xpCurrent / 1000) * 100));
   const xpLeft = 1000 - xpCurrent;
 
@@ -346,7 +346,7 @@ export default function DashboardPage() {
                       </div>
                       <div className="bg-black/30 p-2.5 rounded-xl border border-white/5">
                         <div className="text-[10px] text-slate-400 font-bold">💰 Coin</div>
-                        <div className="text-base font-mono font-black text-amber-400">{user.coinBalance.toLocaleString()}</div>
+                        <div className="text-base font-mono font-black text-amber-400">{(user?.coinBalance ?? 0).toLocaleString()}</div>
                       </div>
                     </div>
 
@@ -1053,12 +1053,12 @@ export default function DashboardPage() {
                   <div className="bg-[#10132b] border border-white/5 rounded-xl p-2 text-center">
                     <div className="text-sm mb-0.5">🏆</div>
                     <div className="text-[9px] text-slate-400 font-bold">Kupa</div>
-                    <div className="text-[11px] font-mono font-black text-amber-300">{Math.floor(user.xp / 10)}</div>
+                    <div className="text-[11px] font-mono font-black text-amber-300">{Math.floor((user?.xp ?? 0) / 10)}</div>
                   </div>
                   <div className="bg-[#10132b] border border-white/5 rounded-xl p-2 text-center">
                     <div className="text-sm mb-0.5">💰</div>
                     <div className="text-[9px] text-slate-400 font-bold">Coin</div>
-                    <div className="text-[11px] font-mono font-black text-amber-400">{user.coinBalance.toLocaleString()}</div>
+                    <div className="text-[11px] font-mono font-black text-amber-400">{(user?.coinBalance ?? 0).toLocaleString()}</div>
                   </div>
                   <div className="bg-[#10132b] border border-white/5 rounded-xl p-2 text-center">
                     <div className="text-sm mb-0.5">🎯</div>
@@ -1068,7 +1068,7 @@ export default function DashboardPage() {
                   <div className="bg-[#10132b] border border-white/5 rounded-xl p-2 text-center">
                     <div className="text-sm mb-0.5">⚡</div>
                     <div className="text-[9px] text-slate-400 font-bold">Soru</div>
-                    <div className="text-[11px] font-mono font-black text-cyan-400">{aiReport?.totalQuestionsSolved ?? Math.floor(user.xp / 20)}</div>
+                    <div className="text-[11px] font-mono font-black text-cyan-400">{aiReport?.totalQuestionsSolved ?? Math.floor((user?.xp ?? 0) / 20)}</div>
                   </div>
                 </div>
               </div>
