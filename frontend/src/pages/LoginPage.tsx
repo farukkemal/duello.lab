@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { login } from '../api/auth';
+import { login, googleAuth } from '../api/auth';
 import { useAuth } from '../contexts/AuthContext';
+import GoogleLoginButton from '../components/GoogleLoginButton';
 
 export default function LoginPage() {
   const [username, setUsername] = useState('');
@@ -9,8 +10,23 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const { setAuth } = useAuth();
   const navigate = useNavigate();
+
+  const handleGoogleSuccess = async (idToken: string) => {
+    setError('');
+    setGoogleLoading(true);
+    try {
+      const { data } = await googleAuth(idToken);
+      setAuth(data.token, data.user);
+      navigate('/dashboard');
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Google ile giriş yapılamadı.');
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -101,12 +117,29 @@ export default function LoginPage() {
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || googleLoading}
               className="w-full py-4 rounded-2xl btn-game-primary text-white font-black text-sm uppercase tracking-wider cursor-pointer disabled:opacity-50 mt-2"
             >
               {loading ? 'Giriş Yapılıyor...' : 'Arenaya Gir ➔'}
             </button>
           </form>
+
+          {/* Divider */}
+          <div className="relative flex items-center justify-center my-3">
+            <div className="border-t border-white/10 w-full" />
+            <span className="bg-[#131633] px-3 text-[10px] font-black uppercase tracking-wider text-slate-400 select-none">
+              veya
+            </span>
+            <div className="border-t border-white/10 w-full" />
+          </div>
+
+          {/* Google Sign In Button */}
+          <GoogleLoginButton
+            text="signin_with"
+            isLoading={googleLoading}
+            onSuccess={handleGoogleSuccess}
+            onError={(err) => setError(err)}
+          />
         </div>
 
         {/* Footer Link */}

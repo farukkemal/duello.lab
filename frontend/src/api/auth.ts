@@ -23,5 +23,8 @@ export const register = (username: string, email: string, password: string) =>
 export const login = (username: string, password: string) =>
   api.post<AuthResponse>('/auth/login', { username, password });
 
+export const googleAuth = (idToken: string) =>
+  api.post<AuthResponse>('/auth/google', { idToken });
+
 export const getMe = () =>
   api.get<UserDto>('/auth/me');

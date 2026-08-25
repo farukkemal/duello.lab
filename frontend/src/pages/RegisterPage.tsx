@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { register } from '../api/auth';
+import { register, googleAuth } from '../api/auth';
 import { useAuth } from '../contexts/AuthContext';
+import GoogleLoginButton from '../components/GoogleLoginButton';
 
 export default function RegisterPage() {
   const [username, setUsername] = useState('');
@@ -10,8 +11,23 @@ export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const { setAuth } = useAuth();
   const navigate = useNavigate();
+
+  const handleGoogleSuccess = async (idToken: string) => {
+    setError('');
+    setGoogleLoading(true);
+    try {
+      const { data } = await googleAuth(idToken);
+      setAuth(data.token, data.user);
+      navigate('/dashboard');
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Google ile kayıt işlemi yapılamadı.');
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -118,12 +134,29 @@ export default function RegisterPage() {
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || googleLoading}
               className="w-full py-3.5 rounded-2xl btn-game-gold text-slate-950 font-black text-xs uppercase tracking-wider cursor-pointer disabled:opacity-50 mt-2"
             >
               {loading ? 'Hesap Açılıyor...' : '🎁 100 Coin ile Kayıt Ol'}
             </button>
           </form>
+
+          {/* Divider */}
+          <div className="relative flex items-center justify-center my-3">
+            <div className="border-t border-white/10 w-full" />
+            <span className="bg-[#131633] px-3 text-[10px] font-black uppercase tracking-wider text-slate-400 select-none">
+              veya
+            </span>
+            <div className="border-t border-white/10 w-full" />
+          </div>
+
+          {/* Google Sign Up Button */}
+          <GoogleLoginButton
+            text="signup_with"
+            isLoading={googleLoading}
+            onSuccess={handleGoogleSuccess}
+            onError={(err) => setError(err)}
+          />
         </div>
 
         {/* Footer Link */}
