@@ -1,15 +1,20 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { useSignalR } from '../contexts/SignalRContext';
+import { useViewMode } from '../contexts/ViewModeContext';
 import { getSoloExams, type ExamListItem } from '../api/exams';
 import { createRoom, joinRoom, createBattleground, type GameMode } from '../api/rooms';
 import MobileTopHUD from '../components/MobileTopHUD';
 import MobileBottomNav, { type MobileTab } from '../components/MobileBottomNav';
+import DesktopNavbar from '../components/DesktopNavbar';
+import DesktopArenaView from '../components/desktop/DesktopArenaView';
+import ViewModeToggle from '../components/ViewModeToggle';
 import MatchmakingModal from '../components/MatchmakingModal';
 import AiCoachReportModal from '../components/AiCoachReportModal';
 import BotMatchModal from '../components/BotMatchModal';
 import InstallPwaBanner from '../components/InstallPwaBanner';
-import { getWeaknessReport, type AiCoachReport } from '../api/analytics';
+import { getWeaknessReport, type AiCoachReport, type BranchPerformance } from '../api/analytics';
 import { isAudioMuted, toggleAudioMute } from '../utils/audio';
 import {
   CrossedSwordsGraphic,
@@ -21,6 +26,8 @@ import {
 
 export default function DashboardPage() {
   const { user, logout, refreshUser } = useAuth();
+  const { stats } = useSignalR();
+  const { isDesktop } = useViewMode();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
@@ -37,6 +44,7 @@ export default function DashboardPage() {
     }
   }, [searchParams, location.state]);
   const [exams, setExams] = useState<ExamListItem[]>([]);
+  const [activeRooms] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState<string>('TYT');
 
@@ -141,8 +149,415 @@ export default function DashboardPage() {
     ? exams
     : exams.filter(e => e.category.toUpperCase() === selectedCategory.toUpperCase());
 
+  // ==========================================
+  // DESKTOP (PC) FULL-WIDTH VIEWPORT RENDER
+  // ==========================================
+  if (isDesktop) {
+    return (
+      <div className="min-h-screen bg-[#060710] text-slate-100 flex flex-col relative overflow-x-hidden">
+        {/* Desktop Navbar */}
+        <DesktopNavbar activeTab={activeTab} onSelectTab={setActiveTab} />
+
+        {/* Desktop Content Area */}
+        <main className="flex-1 pb-10">
+          {activeTab === 'arena' && (
+            <DesktopArenaView
+              onStartMatchmaking={setMatchmakingMode}
+              onStartBotPractice={() => setShowBotModal(true)}
+              onSelectCategory={(cat) => setSelectedCategory(cat)}
+              selectedCategory={selectedCategory as 'TYT' | 'AYT'}
+              activeRooms={activeRooms}
+              onOpenCreateLobby={() => setShowCreateModal(true)}
+              onOpenJoinCode={() => setShowJoinModal(true)}
+              stats={stats}
+            />
+          )}
+
+          {/* TAB: DÜELLOLAR (DESKTOP) */}
+          {activeTab === 'duello' && (
+            <div className="max-w-6xl mx-auto px-6 py-6 space-y-6 animate-fadeIn">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-2xl font-black text-white">⚔️ Canlı Düellolar & Açık Odalar</h2>
+                  <p className="text-xs text-slate-400">Özel odalara katıl veya yeni oda kurarak arkadaşlarını davet et</p>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setShowCreateModal(true)}
+                    className="px-4 py-2.5 rounded-xl btn-game-gold text-slate-950 font-black text-xs uppercase cursor-pointer shadow hover:scale-105 transition"
+                  >
+                    👑 Özel Lobi Kur
+                  </button>
+                  <button
+                    onClick={() => setShowJoinModal(true)}
+                    className="px-4 py-2.5 rounded-xl btn-game-primary text-white font-black text-xs uppercase cursor-pointer shadow hover:scale-105 transition"
+                  >
+                    🔑 Koda Katıl
+                  </button>
+                </div>
+              </div>
+
+              {activeRooms.length === 0 ? (
+                <div className="game-card-3d p-12 text-center space-y-3">
+                  <div className="text-5xl animate-bounce-subtle">📡</div>
+                  <h3 className="text-base font-black text-white">Şu Anda Açık Özel Lobi Bulunmuyor</h3>
+                  <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                    Kendi özel lobini kurup arkadaşlarını davet edebilir veya Arena sayfasından 1v1 Hızlı Düello eşleşmesine girebilirsin.
+                  </p>
+                  <button
+                    onClick={() => setShowCreateModal(true)}
+                    className="px-6 py-3 rounded-2xl btn-game-gold font-black text-xs uppercase cursor-pointer shadow-lg mt-2"
+                  >
+                    + Hemen Lobi Kur
+                  </button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {activeRooms.map((r) => (
+                    <div key={r.code} className="game-card-3d p-5 space-y-3 flex flex-col justify-between">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <span className="text-[10px] bg-violet-600/30 text-violet-300 border border-violet-500/30 px-2 py-0.5 rounded-full font-bold uppercase">
+                            {r.category}
+                          </span>
+                          <h4 className="text-base font-black text-white mt-1.5">{r.name}</h4>
+                          <p className="text-[10px] text-slate-400 font-mono">Kurucu: {r.creatorUsername}</p>
+                        </div>
+                        <span className="text-xs font-mono font-black text-amber-300 bg-amber-500/10 border border-amber-500/20 px-2 py-1 rounded-xl">
+                          {r.playersCount}/{r.maxPlayers}
+                        </span>
+                      </div>
+
+                      <button
+                        onClick={() => navigate(`/lobby/${r.code}`)}
+                        className="w-full py-2.5 rounded-xl btn-game-primary text-white font-black text-xs uppercase cursor-pointer shadow hover:scale-102 transition"
+                      >
+                        Lobiye Katıl ➔
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB: PRATİK (DESKTOP) */}
+          {activeTab === 'pratik' && (
+            <div className="max-w-6xl mx-auto px-6 py-6 space-y-6 animate-fadeIn">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-2xl font-black text-white">📝 Bireysel Solo Denemeler</h2>
+                  <p className="text-xs text-slate-400">Süre kısıtlamalı solo YKS deneme sınavları ile seviyeni test et</p>
+                </div>
+                <div className="flex bg-[#171b38] p-1 rounded-2xl border border-white/10">
+                  {categories.map((c) => (
+                    <button
+                      key={c}
+                      onClick={() => setSelectedCategory(c)}
+                      className={`px-4 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                        selectedCategory === c ? 'bg-violet-600 text-white shadow-md' : 'text-slate-400'
+                      }`}
+                    >
+                      {c}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {loading ? (
+                <div className="py-12 text-center text-slate-400 font-bold text-sm">Sınavlar yükleniyor...</div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {filteredExams.map((exam) => (
+                    <div key={exam.id} className="game-card-3d p-5 space-y-3 flex flex-col justify-between">
+                      <div>
+                        <span className="text-[10px] bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 px-2 py-0.5 rounded-full font-bold uppercase">
+                          {exam.category}
+                        </span>
+                        <h4 className="text-base font-black text-white mt-1.5">{exam.title}</h4>
+                      </div>
+
+                      <div className="flex items-center justify-between text-xs font-mono text-slate-400 pt-2 border-t border-white/5">
+                        <span>❓ {exam.questionCount} Soru</span>
+                        <span>⚡ Seviye 1+</span>
+                      </div>
+
+                      <button
+                        onClick={() => navigate(`/exam/${exam.id}`)}
+                        className="w-full py-2.5 rounded-xl btn-game-primary text-white font-black text-xs uppercase cursor-pointer hover:scale-102 transition shadow"
+                      >
+                        Sınavı Başlat ➔
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB: PROFİL & ANALİZLER (DESKTOP) */}
+          {activeTab === 'profil' && (
+            <div className="max-w-6xl mx-auto px-6 py-6 space-y-6 animate-fadeIn">
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                
+                {/* Profile Hero Card */}
+                <div className="lg:col-span-4 space-y-4">
+                  <div className="game-card-3d p-6 text-center space-y-4">
+                    <div className="w-20 h-20 mx-auto rounded-3xl bg-gradient-to-tr from-violet-600 via-indigo-600 to-cyan-400 p-[3px] shadow-xl">
+                      <div className="w-full h-full bg-[#0d0f22] rounded-[21px] flex items-center justify-center font-black text-white text-3xl">
+                        {user.username.charAt(0).toUpperCase()}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-violet-500/20 border border-violet-500/30 text-violet-300 text-xs font-black mb-1">
+                        <span>{user.role === 'Admin' ? '👑 Yönetici' : '⚔️ Savaşçı'}</span>
+                      </div>
+                      <h2 className="text-2xl font-black text-white">{user.username}</h2>
+                      <p className="text-xs text-slate-400 font-mono">{user.email}</p>
+                    </div>
+
+                    <div className="space-y-1 bg-black/40 p-3 rounded-2xl border border-white/5">
+                      <div className="flex justify-between text-xs font-bold font-mono">
+                        <span className="text-slate-400">Seviye {user.level}</span>
+                        <span className="text-cyan-400">{xpCurrent} / 1000 XP</span>
+                      </div>
+                      <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+                        <div
+                          className="bg-gradient-to-r from-violet-500 to-cyan-400 h-full rounded-full"
+                          style={{ width: `${xpPercent}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="bg-black/30 p-2.5 rounded-xl border border-white/5">
+                        <div className="text-[10px] text-slate-400 font-bold">🏆 Kupa</div>
+                        <div className="text-base font-mono font-black text-amber-300">1,240</div>
+                      </div>
+                      <div className="bg-black/30 p-2.5 rounded-xl border border-white/5">
+                        <div className="text-[10px] text-slate-400 font-bold">💰 Coin</div>
+                        <div className="text-base font-mono font-black text-amber-400">{user.coinBalance.toLocaleString()}</div>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={logout}
+                      className="w-full py-3 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-300 hover:bg-rose-500/25 font-bold text-xs uppercase cursor-pointer transition"
+                    >
+                      🚪 Oturumu Kapat
+                    </button>
+                  </div>
+                </div>
+
+                {/* AI Advice & 8-Branch Heatmap */}
+                <div className="lg:col-span-8 space-y-4">
+                  {aiReport && (
+                    <>
+                      <div className="game-card-3d p-5 space-y-3 bg-gradient-to-r from-violet-950/60 to-indigo-950/60 border-violet-500/40">
+                        <h3 className="text-sm font-black text-white flex items-center gap-2">
+                          <span>🤖</span>
+                          <span>AI Sınav Koçu Stratejik Tavsiyeleri</span>
+                        </h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                          {aiReport.aiAdviceList.map((adv, i) => (
+                            <div key={i} className="bg-black/30 p-3 rounded-xl border border-white/5 text-xs text-slate-200">
+                              💡 {adv}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="game-card-3d p-5 space-y-4">
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-sm font-black text-white">🔥 8 Branş Detaylı Başarı Isı Haritası</h3>
+                          <span className="text-xs text-slate-400 font-mono">Net Doğruluk Oranı</span>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          {aiReport.branchHeatmap.map((bp: BranchPerformance) => (
+                            <div key={bp.branch} className="bg-black/30 p-3.5 rounded-2xl border border-white/5 space-y-2">
+                              <div className="flex justify-between items-center">
+                                <span className="text-xs font-black text-white">{bp.branch}</span>
+                                <span className="text-xs font-mono font-black text-cyan-400">%{bp.accuracyRate} Başarı</span>
+                              </div>
+                              <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full ${
+                                    bp.accuracyRate >= 70
+                                      ? 'bg-emerald-400 shadow-[0_0_8px_#34d399]'
+                                      : bp.accuracyRate >= 45
+                                      ? 'bg-amber-400'
+                                      : 'bg-rose-500 shadow-[0_0_8px_#f43f5e]'
+                                  }`}
+                                  style={{ width: `${Math.max(5, bp.accuracyRate)}%` }}
+                                />
+                              </div>
+                              <p className="text-[11px] text-slate-300 leading-snug">{bp.recommendation}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+              </div>
+            </div>
+          )}
+        </main>
+
+        {/* Global Matchmaking Modal */}
+        {matchmakingMode !== null && (
+          <MatchmakingModal
+            mode={matchmakingMode}
+            category={selectedCategory}
+            onCancel={() => setMatchmakingMode(null)}
+            onMatchFound={(roomCode) => navigate(`/lobby/${roomCode}`)}
+          />
+        )}
+
+        {/* Modals */}
+        <AiCoachReportModal isOpen={showAiCoach} onClose={() => setShowAiCoach(false)} />
+        <BotMatchModal isOpen={showBotModal} onClose={() => setShowBotModal(false)} />
+
+        {/* CREATE ROOM MODAL (DESKTOP) */}
+        {showCreateModal && (
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn">
+            <div className="w-full max-w-md bg-[#131631] border border-white/15 rounded-3xl p-6 shadow-2xl space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-2xl">👑</span>
+                  <h3 className="text-lg font-black text-white">Özel Lobi Kur</h3>
+                </div>
+                <button
+                  onClick={() => setShowCreateModal(false)}
+                  className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-slate-300 cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {modalError && (
+                <div className="bg-rose-500/20 border border-rose-500 text-rose-300 text-xs rounded-xl p-2.5 font-bold">
+                  {modalError}
+                </div>
+              )}
+
+              <form onSubmit={handleCreateRoom} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1 uppercase">Oda Adı</label>
+                  <input
+                    type="text"
+                    value={roomTitle}
+                    onChange={(e) => setRoomTitle(e.target.value)}
+                    className="w-full bg-[#1b2046] border border-white/10 rounded-xl px-3 py-2.5 text-white text-xs font-bold focus:outline-none focus:border-violet-500"
+                    required
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-300 mb-1 uppercase">Kategori</label>
+                    <select
+                      value={roomCategory}
+                      onChange={(e) => setRoomCategory(e.target.value)}
+                      className="w-full bg-[#1b2046] border border-white/10 rounded-xl px-3 py-2.5 text-white text-xs font-bold focus:outline-none"
+                    >
+                      <option value="TYT">TYT</option>
+                      <option value="AYT">AYT</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-300 mb-1 uppercase">Soru Sayısı</label>
+                    <select
+                      value={roomQuestionCount}
+                      onChange={(e) => setRoomQuestionCount(Number(e.target.value))}
+                      className="w-full bg-[#1b2046] border border-white/10 rounded-xl px-3 py-2.5 text-white text-xs font-bold focus:outline-none"
+                    >
+                      <option value={3}>3 Soru (Hızlı)</option>
+                      <option value={5}>5 Soru (Normal)</option>
+                      <option value={10}>10 Soru (Turnuva)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={modalLoading}
+                  className="w-full py-3.5 rounded-2xl btn-game-gold font-black text-xs uppercase cursor-pointer"
+                >
+                  {modalLoading ? 'Kuruluyor...' : 'Odayı Aç ➔'}
+                </button>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* JOIN ROOM MODAL (DESKTOP) */}
+        {showJoinModal && (
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn">
+            <div className="w-full max-w-md bg-[#131631] border border-white/15 rounded-3xl p-6 shadow-2xl space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-2xl">🔑</span>
+                  <h3 className="text-lg font-black text-white">Lobiye Katıl</h3>
+                </div>
+                <button
+                  onClick={() => setShowJoinModal(false)}
+                  className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-slate-300 cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {modalError && (
+                <div className="bg-rose-500/20 border border-rose-500 text-rose-300 text-xs rounded-xl p-2.5 font-bold">
+                  {modalError}
+                </div>
+              )}
+
+              <form onSubmit={handleJoinRoom} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-black text-slate-300 mb-2 uppercase text-center">
+                    4 Haneli Oda Kodunu Gir
+                  </label>
+                  <input
+                    type="text"
+                    maxLength={6}
+                    placeholder="Örn: X8K2"
+                    value={joinCode}
+                    onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+                    className="w-full bg-[#1b2046] border-2 border-violet-500 rounded-2xl py-4 text-center text-3xl font-mono font-black tracking-widest text-violet-300 uppercase focus:outline-none"
+                    required
+                    autoFocus
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={modalLoading || joinCode.length < 4}
+                  className="w-full py-3.5 rounded-2xl btn-game-primary font-black text-xs uppercase text-white cursor-pointer disabled:opacity-50"
+                >
+                  {modalLoading ? 'Giriş Yapılıyor...' : 'Odaya Gir →'}
+                </button>
+              </form>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ==========================================
+  // MOBILE APP SHELL RENDER
+  // ==========================================
   return (
-    <div className="h-screen h-[100dvh] bg-[#060710] flex justify-center overflow-hidden">
+    <div className="h-screen h-[100dvh] bg-[#060710] flex justify-center overflow-hidden relative">
+      {/* Floating View Mode Switcher */}
+      <ViewModeToggle isFloating />
+
       <div className="w-full max-w-md mobile-app-shell flex flex-col relative overflow-hidden">
         
         {/* Top Game HUD Bar */}

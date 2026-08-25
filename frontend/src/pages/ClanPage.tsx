@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useSignalR } from '../contexts/SignalRContext';
+import { useViewMode } from '../contexts/ViewModeContext';
 import {
   getMyClan,
   getTopClans,
@@ -18,10 +19,14 @@ import {
 import { triggerLevelUpConfetti } from '../utils/confetti';
 import MobileTopHUD from '../components/MobileTopHUD';
 import MobileBottomNav, { type MobileTab } from '../components/MobileBottomNav';
+import DesktopNavbar from '../components/DesktopNavbar';
+import DesktopClanView from '../components/desktop/DesktopClanView';
+import ViewModeToggle from '../components/ViewModeToggle';
 
 export default function ClanPage() {
   const { user, refreshUser } = useAuth();
   const { connection } = useSignalR();
+  const { isDesktop } = useViewMode();
   const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState<'my_clan' | 'search' | 'leaderboard'>('my_clan');
@@ -202,8 +207,161 @@ export default function ClanPage() {
 
   const badgeIcons = ['🛡️', '🔥', '⚡', '👑', '🦅', '🦁', '⚔️', '💎'];
 
+  // ==========================================
+  // DESKTOP CLAN VIEWPORT RENDER
+  // ==========================================
+  if (isDesktop) {
+    return (
+      <div className="min-h-screen bg-[#060710] text-slate-100 flex flex-col relative overflow-x-hidden">
+        {/* Desktop Navbar */}
+        <DesktopNavbar activeTab="klan" onSelectTab={handleNavTab} />
+
+        {/* Desktop Clan Page Body */}
+        <main className="flex-1 pb-10">
+          <DesktopClanView
+            myClan={myClan}
+            user={user}
+            messages={messages}
+            chatLoading={chatLoading}
+            sendingMsg={sendingMsg}
+            chatInput={chatInput}
+            setChatInput={setChatInput}
+            onSendMessage={handleSendMessage}
+            onLeaveClan={handleLeaveClan}
+            onRefreshMessages={() => myClan && loadChatMessages(myClan.id)}
+            onOpenCreateModal={() => setShowCreateModal(true)}
+            messagesEndRef={messagesEndRef}
+          />
+        </main>
+
+        {/* CREATE MODAL (DESKTOP) */}
+        {showCreateModal && (
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn">
+            <div className="w-full max-w-md bg-[#131631] border border-white/15 rounded-3xl p-6 shadow-2xl space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-2xl">👑</span>
+                  <h3 className="text-lg font-black text-white">Yeni Çalışma Loncası Kur</h3>
+                </div>
+                <button
+                  onClick={() => setShowCreateModal(false)}
+                  className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-slate-300 cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {createError && (
+                <div className="bg-rose-500/20 border border-rose-500 text-rose-300 text-xs rounded-xl p-2.5 font-bold">
+                  {createError}
+                </div>
+              )}
+
+              <form onSubmit={handleCreateClan} className="space-y-3.5">
+                <div>
+                  <label className="block text-[10px] font-black text-slate-300 mb-1 uppercase">Klan Adı</label>
+                  <input
+                    type="text"
+                    placeholder="örn: Sayısal Gladyatörleri"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="w-full bg-[#1b2046] border border-white/10 rounded-xl px-3 py-2.5 text-white text-xs font-bold focus:outline-none focus:border-violet-500"
+                    required
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-300 mb-1 uppercase">Etiket (Tag)</label>
+                    <input
+                      type="text"
+                      maxLength={6}
+                      placeholder="FEN"
+                      value={tag}
+                      onChange={(e) => setTag(e.target.value.toUpperCase())}
+                      className="w-full bg-[#1b2046] border border-white/10 rounded-xl px-3 py-2.5 text-white text-xs font-bold font-mono uppercase focus:outline-none"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-300 mb-1 uppercase">Min. Seviye</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={50}
+                      value={minLevel}
+                      onChange={(e) => setMinLevel(Number(e.target.value))}
+                      className="w-full bg-[#1b2046] border border-white/10 rounded-xl px-3 py-2.5 text-white text-xs font-bold font-mono focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-black text-slate-300 mb-1 uppercase">Klan Rozeti</label>
+                  <div className="flex gap-2 justify-center py-1">
+                    {badgeIcons.map((icon) => (
+                      <button
+                        key={icon}
+                        type="button"
+                        onClick={() => setBadgeIcon(icon)}
+                        className={`w-9 h-9 rounded-xl flex items-center justify-center text-lg border transition ${
+                          badgeIcon === icon ? 'bg-violet-600 border-white shadow' : 'bg-white/5 border-white/10'
+                        }`}
+                      >
+                        {icon}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-black text-slate-300 mb-1 uppercase">Açıklama</label>
+                  <textarea
+                    rows={2}
+                    placeholder="Klan hedefleri ve kuralları..."
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    className="w-full bg-[#1b2046] border border-white/10 rounded-xl px-3 py-2 text-white text-xs font-bold focus:outline-none"
+                  />
+                </div>
+
+                <div className="flex items-center gap-2 pt-1">
+                  <input
+                    type="checkbox"
+                    id="isOpenCheckboxDesk"
+                    checked={isOpen}
+                    onChange={(e) => setIsOpen(e.target.checked)}
+                    className="w-4 h-4 rounded accent-violet-600"
+                  />
+                  <label htmlFor="isOpenCheckboxDesk" className="text-xs font-bold text-slate-300 select-none cursor-pointer">
+                    Açık Klan (Herkes onaysız katılabilir)
+                  </label>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={createLoading || !name.trim()}
+                  className="w-full py-3.5 rounded-2xl btn-game-gold font-black text-xs uppercase cursor-pointer disabled:opacity-50"
+                >
+                  {createLoading ? 'Klan Kuruluyor...' : '🏰 Klanı Kur ve Lider Ol'}
+                </button>
+              </form>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ==========================================
+  // MOBILE CLAN VIEWPORT RENDER
+  // ==========================================
   return (
-    <div className="h-screen h-[100dvh] bg-[#060710] flex justify-center overflow-hidden">
+    <div className="h-screen h-[100dvh] bg-[#060710] flex justify-center overflow-hidden relative">
+      {/* Floating View Switcher */}
+      <ViewModeToggle isFloating />
+
       <div className="w-full max-w-md mobile-app-shell flex flex-col relative overflow-hidden">
         
         {/* Top Game HUD */}

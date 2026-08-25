@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { SignalRProvider } from './contexts/SignalRContext';
+import { ViewModeProvider } from './contexts/ViewModeContext';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import DashboardPage from './pages/DashboardPage';
@@ -61,10 +62,13 @@ export default function App() {
     <BrowserRouter>
       <AuthProvider>
         <SignalRProvider>
-          <AppRoutes />
-          <GlobalDuelInviteModal />
+          <ViewModeProvider>
+            <AppRoutes />
+            <GlobalDuelInviteModal />
+          </ViewModeProvider>
         </SignalRProvider>
       </AuthProvider>
     </BrowserRouter>
   );
 }
+
