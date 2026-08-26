@@ -19,10 +19,16 @@ export default function LoginPage() {
     setGoogleLoading(true);
     try {
       const { data } = await googleAuth(idToken);
-      setAuth(data.token, data.user);
-      navigate('/dashboard');
+      if (data?.token && data?.user) {
+        setAuth(data.token, data.user);
+        navigate('/dashboard');
+      } else {
+        setError('Google oturum bilgileri doğrulanamadı.');
+      }
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Google ile giriş yapılamadı.');
+      console.error('Google Login Error:', err);
+      const serverMsg = err.response?.data?.error || err.response?.data?.message || err.message;
+      setError(serverMsg || 'Google ile giriş yapılamadı. Lütfen tekrar deneyin.');
     } finally {
       setGoogleLoading(false);
     }

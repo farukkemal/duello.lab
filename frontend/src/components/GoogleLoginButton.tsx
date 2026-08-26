@@ -31,11 +31,18 @@ export default function GoogleLoginButton({
 }: GoogleLoginButtonProps) {
   const buttonRef = useRef<HTMLDivElement | null>(null);
   const [sdkReady, setSdkReady] = useState(false);
+  const onSuccessRef = useRef(onSuccess);
+  const onErrorRef = useRef(onError);
+
+  // Keep latest callback references without re-running initialization effect
+  useEffect(() => {
+    onSuccessRef.current = onSuccess;
+    onErrorRef.current = onError;
+  });
 
   const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || DEFAULT_GOOGLE_CLIENT_ID;
 
   useEffect(() => {
-    // Check if Google GSI script already exists
     if (window.google?.accounts?.id) {
       setSdkReady(true);
       return;
@@ -51,12 +58,12 @@ export default function GoogleLoginButton({
       script.async = true;
       script.defer = true;
       script.onload = () => setSdkReady(true);
-      script.onerror = () => onError?.('Google oturum açma kütüphanesi yüklenemedi.');
+      script.onerror = () => onErrorRef.current?.('Google oturum açma kütüphanesi yüklenemedi.');
       document.head.appendChild(script);
     } else {
       script.addEventListener('load', () => setSdkReady(true));
     }
-  }, [onError]);
+  }, []);
 
   useEffect(() => {
     if (!sdkReady || !buttonRef.current || !window.google?.accounts?.id) return;
@@ -66,16 +73,16 @@ export default function GoogleLoginButton({
         client_id: clientId,
         callback: (response: any) => {
           if (response?.credential) {
-            onSuccess(response.credential);
+            onSuccessRef.current(response.credential);
           } else {
-            onError?.('Google oturum doğrulaması alınamadı.');
+            onErrorRef.current?.('Google oturum doğrulaması alınamadı.');
           }
         },
         auto_select: false,
         cancel_on_tap_outside: true,
+        ux_mode: 'popup',
       });
 
-      // Render official Google button inside container
       buttonRef.current.innerHTML = '';
       window.google.accounts.id.renderButton(buttonRef.current, {
         type: 'standard',
@@ -89,7 +96,7 @@ export default function GoogleLoginButton({
     } catch (err) {
       console.error('Google Sign-In init error:', err);
     }
-  }, [sdkReady, clientId, text, onSuccess, onError]);
+  }, [sdkReady, clientId, text]);
 
   return (
     <div className="w-full flex flex-col items-center justify-center my-2 select-none relative min-h-[44px]">

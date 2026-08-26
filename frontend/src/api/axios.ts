@@ -1,7 +1,12 @@
 import axios from 'axios';
 
-const apiBaseUrl = import.meta.env.VITE_API_URL 
-  ? `${import.meta.env.VITE_API_URL.replace(/\/$/, '')}/api`
+const rawApiUrl = (import.meta.env.VITE_API_URL || '').trim();
+if (!rawApiUrl && typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
+  console.warn('⚠️ [API] VITE_API_URL is not configured. Defaulting to /api. In production (Render/Vercel/Netlify), set VITE_API_URL=https://<your-backend>.onrender.com');
+}
+
+const apiBaseUrl = rawApiUrl
+  ? `${rawApiUrl.replace(/\/$/, '')}/api`
   : '/api';
 
 const api = axios.create({
@@ -11,11 +16,18 @@ const api = axios.create({
   },
 });
 
-// Request interceptor to add JWT token
+// Request interceptor to add JWT token (excluding public auth endpoints)
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
+  const url = config.url || '';
+  const isPublicAuthEndpoint = url.includes('/auth/login') || 
+                               url.includes('/auth/register') || 
+                               url.includes('/auth/google');
+
+  if (!isPublicAuthEndpoint) {
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
   }
   return config;
 });
@@ -24,10 +36,22 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    const url = error.config?.url || '';
+    const isPublicAuthEndpoint = url.includes('/auth/login') || 
+                                 url.includes('/auth/register') || 
+                                 url.includes('/auth/google');
+
+    // Only handle global session expiration for protected endpoints
+    if (error.response?.status === 401 && !isPublicAuthEndpoint) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
-      window.location.href = '/login';
+
+      if (typeof window !== 'undefined') {
+        const currentPath = window.location.pathname;
+        if (currentPath !== '/login' && currentPath !== '/register' && currentPath !== '/') {
+          window.location.href = '/login';
+        }
+      }
     }
     return Promise.reject(error);
   }
