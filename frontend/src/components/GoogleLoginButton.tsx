@@ -20,6 +20,9 @@ declare global {
         };
       };
     };
+    __gsiSuccessHandler?: (idToken: string) => void;
+    __gsiErrorHandler?: (error: string) => void;
+    __gsiInitializedId?: string;
   }
 }
 
@@ -31,13 +34,11 @@ export default function GoogleLoginButton({
 }: GoogleLoginButtonProps) {
   const buttonRef = useRef<HTMLDivElement | null>(null);
   const [sdkReady, setSdkReady] = useState(false);
-  const onSuccessRef = useRef(onSuccess);
-  const onErrorRef = useRef(onError);
 
-  // Keep latest callback references without re-running initialization effect
+  // Keep latest callback references globally dispatched without re-running initialize()
   useEffect(() => {
-    onSuccessRef.current = onSuccess;
-    onErrorRef.current = onError;
+    window.__gsiSuccessHandler = onSuccess;
+    window.__gsiErrorHandler = onError;
   });
 
   const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || DEFAULT_GOOGLE_CLIENT_ID;
@@ -58,7 +59,9 @@ export default function GoogleLoginButton({
       script.async = true;
       script.defer = true;
       script.onload = () => setSdkReady(true);
-      script.onerror = () => onErrorRef.current?.('Google oturum açma kütüphanesi yüklenemedi.');
+      script.onerror = () => {
+        window.__gsiErrorHandler?.('Google oturum açma kütüphanesi yüklenemedi.');
+      };
       document.head.appendChild(script);
     } else {
       script.addEventListener('load', () => setSdkReady(true));
@@ -69,19 +72,23 @@ export default function GoogleLoginButton({
     if (!sdkReady || !buttonRef.current || !window.google?.accounts?.id) return;
 
     try {
-      window.google.accounts.id.initialize({
-        client_id: clientId,
-        callback: (response: any) => {
-          if (response?.credential) {
-            onSuccessRef.current(response.credential);
-          } else {
-            onErrorRef.current?.('Google oturum doğrulaması alınamadı.');
-          }
-        },
-        auto_select: false,
-        cancel_on_tap_outside: true,
-        ux_mode: 'popup',
-      });
+      // Prevent multiple initialize calls warning [GSI_LOGGER]
+      if (window.__gsiInitializedId !== clientId) {
+        window.google.accounts.id.initialize({
+          client_id: clientId,
+          callback: (response: any) => {
+            if (response?.credential) {
+              window.__gsiSuccessHandler?.(response.credential);
+            } else {
+              window.__gsiErrorHandler?.('Google oturum doğrulaması alınamadı.');
+            }
+          },
+          auto_select: false,
+          cancel_on_tap_outside: true,
+          ux_mode: 'popup',
+        });
+        window.__gsiInitializedId = clientId;
+      }
 
       buttonRef.current.innerHTML = '';
       window.google.accounts.id.renderButton(buttonRef.current, {
@@ -94,7 +101,7 @@ export default function GoogleLoginButton({
         width: 320,
       });
     } catch (err) {
-      console.error('Google Sign-In init error:', err);
+      console.error('Google Sign-In initialization error:', err);
     }
   }, [sdkReady, clientId, text]);
 

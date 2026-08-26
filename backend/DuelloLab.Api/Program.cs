@@ -26,7 +26,7 @@ var dataSource = dataSourceBuilder.Build();
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(dataSource));
 
-// Redis - Resilient connection
+// Redis - Resilient connection with seamless In-Memory fallback
 var redisConnectionString = builder.Configuration.GetConnectionString("Redis") ?? "localhost:6379,abortConnect=false,connectTimeout=2000";
 IConnectionMultiplexer? redisMultiplexer = null;
 try
@@ -35,15 +35,18 @@ try
     redisOptions.AbortOnConnectFail = false;
     redisOptions.ConnectTimeout = 2000;
     redisMultiplexer = ConnectionMultiplexer.Connect(redisOptions);
-    builder.Services.AddSingleton<IConnectionMultiplexer>(redisMultiplexer);
 }
 catch (Exception ex)
 {
-    Console.WriteLine($"[Warning] Redis initial connect failed: {ex.Message}. Fallback will be used.");
+    Console.WriteLine($"[Warning] Redis initial connect failed: {ex.Message}. In-Memory fallback will be used.");
 }
 
 // Room State Service (Redis + In-Memory Fallback)
-builder.Services.AddSingleton<IRoomStateService, RedisRoomStateService>();
+builder.Services.AddSingleton<IRoomStateService>(sp =>
+{
+    var logger = sp.GetRequiredService<ILogger<RedisRoomStateService>>();
+    return new RedisRoomStateService(redisMultiplexer, logger);
+});
 
 // SignalR
 builder.Services.AddSignalR(options =>
@@ -187,11 +190,66 @@ using (var scope = app.Services.CreateScope())
     {
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-        // Ensure database tables exist
-        await db.Database.EnsureCreatedAsync();
-
-        // Ensure Clans, ClanMembers, Friendships, ClanMessages tables exist
+        // Ensure all database tables and indexes exist
         await db.Database.ExecuteSqlRawAsync(@"
+            CREATE TABLE IF NOT EXISTS ""Users"" (
+                ""Id"" uuid PRIMARY KEY,
+                ""Username"" varchar(50) NOT NULL,
+                ""Email"" varchar(100) NOT NULL,
+                ""PasswordHash"" text NOT NULL,
+                ""Level"" integer NOT NULL DEFAULT 1,
+                ""XP"" integer NOT NULL DEFAULT 0,
+                ""CoinBalance"" integer NOT NULL DEFAULT 100,
+                ""CreatedAt"" timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                ""Role"" varchar(20) NOT NULL DEFAULT 'User',
+                ""IsBanned"" boolean NOT NULL DEFAULT false,
+                ""JokerEliminateThree"" integer NOT NULL DEFAULT 1,
+                ""JokerDoubleChance"" integer NOT NULL DEFAULT 1,
+                ""JokerExtraTime"" integer NOT NULL DEFAULT 1
+            );
+
+            CREATE UNIQUE INDEX IF NOT EXISTS ""IX_Users_Username"" ON ""Users"" (lower(""Username""));
+            CREATE UNIQUE INDEX IF NOT EXISTS ""IX_Users_Email"" ON ""Users"" (lower(""Email""));
+
+            CREATE TABLE IF NOT EXISTS ""Exams"" (
+                ""Id"" uuid PRIMARY KEY,
+                ""Title"" varchar(200) NOT NULL,
+                ""Category"" varchar(50) NOT NULL,
+                ""IsActive"" boolean NOT NULL DEFAULT true,
+                ""CreatedAt"" timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS ""Questions"" (
+                ""Id"" uuid PRIMARY KEY,
+                ""ExamId"" uuid NOT NULL REFERENCES ""Exams""(""Id"") ON DELETE CASCADE,
+                ""Branch"" varchar(100) NOT NULL,
+                ""QuestionText"" text NOT NULL,
+                ""Choices"" jsonb NOT NULL,
+                ""CorrectAnswer"" varchar(1) NOT NULL,
+                ""SolutionText"" text NULL,
+                ""ImageUrl"" text NULL,
+                ""PoolType"" varchar(20) NOT NULL DEFAULT 'Battleground',
+                ""AvailableAfter"" timestamptz NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS ""UserResults"" (
+                ""Id"" uuid PRIMARY KEY,
+                ""UserId"" uuid NOT NULL REFERENCES ""Users""(""Id"") ON DELETE CASCADE,
+                ""ExamId"" uuid NOT NULL REFERENCES ""Exams""(""Id"") ON DELETE CASCADE,
+                ""ExamTitle"" varchar(200) NOT NULL DEFAULT '',
+                ""Category"" varchar(50) NOT NULL DEFAULT 'TYT',
+                ""TotalQuestions"" integer NOT NULL DEFAULT 0,
+                ""CorrectCount"" integer NOT NULL DEFAULT 0,
+                ""WrongCount"" integer NOT NULL DEFAULT 0,
+                ""BlankCount"" integer NOT NULL DEFAULT 0,
+                ""NetScore"" numeric(10,2) NOT NULL DEFAULT 0,
+                ""DurationMs"" bigint NOT NULL DEFAULT 0,
+                ""CreatedAt"" timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                ""XpGained"" integer NOT NULL DEFAULT 0,
+                ""NewTotalXp"" integer NOT NULL DEFAULT 0,
+                ""NewLevel"" integer NOT NULL DEFAULT 1
+            );
+
             CREATE TABLE IF NOT EXISTS ""Clans"" (
                 ""Id"" uuid PRIMARY KEY,
                 ""Name"" varchar(50) NOT NULL UNIQUE,

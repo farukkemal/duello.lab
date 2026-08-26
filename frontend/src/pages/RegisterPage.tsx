@@ -28,8 +28,12 @@ export default function RegisterPage() {
       }
     } catch (err: any) {
       console.error('Google Register Error:', err);
-      const serverMsg = err.response?.data?.error || err.response?.data?.message || err.message;
-      setError(serverMsg || 'Google ile kayıt işlemi yapılamadı. Lütfen tekrar deneyin.');
+      if (err.response?.status === 503 || err.response?.status === 502) {
+        setError('⏳ Sunucu başlatılıyor / uyanıyor. Lütfen 15-20 saniye bekleyip tekrar deneyin.');
+      } else {
+        const serverMsg = err.response?.data?.error || err.response?.data?.message || err.message;
+        setError(serverMsg || 'Google ile kayıt işlemi yapılamadı. Lütfen tekrar deneyin.');
+      }
     } finally {
       setGoogleLoading(false);
     }
@@ -44,7 +48,11 @@ export default function RegisterPage() {
       setAuth(data.token, data.user);
       navigate('/dashboard');
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Kayıt işlemi başarısız. Lütfen bilgilerinizi kontrol edin.');
+      if (err.response?.status === 503 || err.response?.status === 502) {
+        setError('⏳ Sunucu başlatılıyor / uyanıyor. Lütfen 15-20 saniye bekleyip tekrar deneyin.');
+      } else {
+        setError(err.response?.data?.error || 'Kayıt işlemi başarısız. Lütfen bilgilerinizi kontrol edin.');
+      }
     } finally {
       setLoading(false);
     }

@@ -27,8 +27,12 @@ export default function LoginPage() {
       }
     } catch (err: any) {
       console.error('Google Login Error:', err);
-      const serverMsg = err.response?.data?.error || err.response?.data?.message || err.message;
-      setError(serverMsg || 'Google ile giriş yapılamadı. Lütfen tekrar deneyin.');
+      if (err.response?.status === 503 || err.response?.status === 502) {
+        setError('⏳ Sunucu başlatılıyor / uyanıyor. Lütfen 15-20 saniye bekleyip tekrar deneyin.');
+      } else {
+        const serverMsg = err.response?.data?.error || err.response?.data?.message || err.message;
+        setError(serverMsg || 'Google ile giriş yapılamadı. Lütfen tekrar deneyin.');
+      }
     } finally {
       setGoogleLoading(false);
     }
@@ -43,7 +47,11 @@ export default function LoginPage() {
       setAuth(data.token, data.user);
       navigate('/dashboard');
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Giriş yapılamadı. Bilgilerinizi kontrol edin.');
+      if (err.response?.status === 503 || err.response?.status === 502) {
+        setError('⏳ Sunucu başlatılıyor / uyanıyor. Lütfen 15-20 saniye bekleyip tekrar deneyin.');
+      } else {
+        setError(err.response?.data?.error || 'Giriş yapılamadı. Bilgilerinizi kontrol edin.');
+      }
     } finally {
       setLoading(false);
     }
