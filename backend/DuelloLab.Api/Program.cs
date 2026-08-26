@@ -159,6 +159,14 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseCors("AllowFrontend");
+
+// Add COOP header for Google Sign-In popup postMessage compatibility
+app.Use(async (context, next) =>
+{
+    context.Response.Headers.Append("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
+    await next();
+});
+
 app.UseAuthentication();
 app.UseAuthorization();
 

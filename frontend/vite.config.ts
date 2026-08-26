@@ -20,5 +20,10 @@ export default defineConfig({
         changeOrigin: true
       }
     }
+  },
+  preview: {
+    headers: {
+      'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
+    }
   }
 })
