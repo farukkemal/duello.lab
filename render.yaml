@@ -1,0 +1,61 @@
+﻿# ==============================================================================
+# duello.lab — Render Blueprint (Infrastructure as Code)
+# ==============================================================================
+# Deploy both Backend (.NET 10 / Docker) and Frontend (React Vite / Static Site)
+# seamlessly on Render with automatic SPA routing and environment mapping.
+# ==============================================================================
+
+services:
+  # ----------------------------------------------------------------------------
+  # 1. Backend Web Service (.NET 10 + SignalR + Supabase PostgreSQL)
+  # ----------------------------------------------------------------------------
+  - type: web
+    name: duellolab-api
+    runtime: docker
+    dockerfilePath: ./backend/DuelloLab.Api/Dockerfile
+    dockerContext: ./backend/DuelloLab.Api
+    plan: free
+    region: frankfurt
+    healthCheckPath: /
+    envVars:
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
+      - key: DATABASE_URL
+        sync: false
+      - key: ConnectionStrings__DefaultConnection
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: Jwt__Secret
+        sync: false
+      - key: Jwt__Issuer
+        value: DuelloLab
+      - key: Jwt__Audience
+        value: DuelloLabUsers
+
+  # ----------------------------------------------------------------------------
+  # 2. Frontend Static Site (React 19 + Vite + Tailwind CSS v4)
+  # ----------------------------------------------------------------------------
+  - type: web
+    name: duellolab-client
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: ./dist
+    plan: free
+    region: frankfurt
+    routes:
+      # SPA Single Page Application Client-side Fallback
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    headers:
+      # Google OAuth 2.0 popup compatibility
+      - path: /*
+        name: Cross-Origin-Opener-Policy
+        value: same-origin-allow-popups
+    envVars:
+      - key: VITE_API_URL
+        sync: false
+      - key: VITE_GOOGLE_CLIENT_ID
+        value: 31375613755-gq98lu8osn3tdi0qmd43gaq4o6sve0jh.apps.googleusercontent.com

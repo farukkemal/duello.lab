@@ -2,7 +2,7 @@ import axios from 'axios';
 
 const rawApiUrl = (import.meta.env.VITE_API_URL || '').trim();
 if (!rawApiUrl && typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
-  console.warn('⚠️ [API] VITE_API_URL is not configured. Defaulting to /api. In production (Render/Vercel/Netlify), set VITE_API_URL=https://<your-backend>.onrender.com');
+  console.warn('⚠️ [API] VITE_API_URL is not configured. Defaulting to /api. In production (Render), set VITE_API_URL=https://<your-backend>.onrender.com');
 }
 
 const apiBaseUrl = rawApiUrl

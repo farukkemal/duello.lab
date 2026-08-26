@@ -111,3 +111,9 @@ npm run dev
 ```bash
 docker-compose up --build
 ```
+
+### Render Cloud Dağıtımı (render.yaml Blueprint):
+Proje kök dizininde yer alan `render.yaml` ile backend (Web Service / Docker) ve frontend (Static Site / Vite SPA) Render üzerinde tam otomatik ayağa kaldırılır.
+- **Backend**: `backend/DuelloLab.Api/Dockerfile` üzerinden .NET 10 Web API + SignalR Hub.
+- **Frontend**: `frontend/` üzerinden React 19 Vite Static Site (SPA yönlendirmesi `/* -> /index.html` ve Google Sign-In COOP başlıkları otomatik yapılandırılmıştır).
+
