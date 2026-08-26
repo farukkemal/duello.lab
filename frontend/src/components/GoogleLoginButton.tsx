@@ -7,7 +7,7 @@ interface GoogleLoginButtonProps {
   isLoading?: boolean;
 }
 
-const DEFAULT_GOOGLE_CLIENT_ID = '31375613755-tu8dkeo411m0kltv4sa2bc6jbjd7cbep.apps.googleusercontent.com';
+const DEFAULT_GOOGLE_CLIENT_ID = '31375613755-gq98lu8osn3tdi0qmd43gaq4o6sve0jh.apps.googleusercontent.com';
 
 declare global {
   interface Window {
