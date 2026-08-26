@@ -10,6 +10,9 @@ export interface UserDto {
   createdAt: string;
   role: string;       // "User" | "Admin"
   isBanned: boolean;
+  jokerEliminateThree: number;
+  jokerDoubleChance: number;
+  jokerExtraTime: number;
 }
 
 export interface AuthResponse {

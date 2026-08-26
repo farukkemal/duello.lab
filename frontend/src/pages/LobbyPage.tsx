@@ -15,6 +15,7 @@ import {
 } from '../api/rooms';
 import { type SoloQuestion } from '../api/exams';
 import { triggerPodiumConfetti } from '../utils/confetti';
+import { useJoker } from '../api/store';
 import {
   playCountdownTick,
   playCountdownGo,
@@ -64,6 +65,12 @@ export default function LobbyPage() {
   // Results & Podium state
   const [myResult, setMyResult] = useState<MatchPlayerResult | null>(null);
   const [leaderboard, setLeaderboard] = useState<MatchPlayerResult[]>([]);
+
+  // Joker state
+  const [eliminatedChoicesMap, setEliminatedChoicesMap] = useState<Record<string, string[]>>({});
+  const [doubleChanceActiveMap, setDoubleChanceActiveMap] = useState<Record<string, boolean>>({});
+  const [selectedDoubleChoicesMap, setSelectedDoubleChoicesMap] = useState<Record<string, string[]>>({});
+  const [jokerLoading, setJokerLoading] = useState(false);
 
   // UI state
   const [copiedCode, setCopiedCode] = useState(false);
@@ -343,8 +350,157 @@ export default function LobbyPage() {
     }
   };
 
+  const handleUseEliminateThree = async () => {
+    if (!user || (user.jokerEliminateThree ?? 0) <= 0 || !currentQuestion || isEliminated) return;
+    if (eliminatedChoicesMap[currentQuestion.id]?.length > 0) {
+      showToast('⚠️ Bu soruda zaten 3 şık eleme jokeri kullanıldı.');
+      return;
+    }
+
+    setJokerLoading(true);
+    try {
+      let toEliminate: string[] = [];
+      try {
+        const { data } = await useJoker('eliminate_three', currentQuestion.id);
+        if (data.eliminatedChoices && data.eliminatedChoices.length > 0) {
+          toEliminate = data.eliminatedChoices;
+        }
+        await refreshUser();
+      } catch (err) {
+        console.warn('Backend joker fallback:', err);
+      }
+
+      // Fallback: If backend didn't return 3 eliminated choices, pick 3 wrong choices on client
+      if (toEliminate.length === 0) {
+        const allKeys = Object.keys(currentQuestion.choices);
+        const correct = (currentQuestion as any).correctAnswer;
+        const wrongs = allKeys.filter(k => k !== correct);
+        toEliminate = wrongs.slice(0, 3);
+        if (toEliminate.length < 3 && allKeys.length > 2) {
+          toEliminate = allKeys.slice(0, allKeys.length - 2);
+        }
+      }
+
+      setEliminatedChoicesMap(prev => ({
+        ...prev,
+        [currentQuestion.id]: toEliminate
+      }));
+
+      // If current answer was eliminated, clear it
+      if (toEliminate.includes(answers[currentQuestion.id] || '')) {
+        const newAns = { ...answers, [currentQuestion.id]: null };
+        setAnswers(newAns);
+      }
+      if (selectedDoubleChoicesMap[currentQuestion.id]) {
+        setSelectedDoubleChoicesMap(prev => ({
+          ...prev,
+          [currentQuestion.id]: (prev[currentQuestion.id] || []).filter(c => !toEliminate.includes(c))
+        }));
+      }
+
+      showToast('🎯 3 Yanlış Şık Silindi! 2 şık kaldı.');
+      triggerPodiumConfetti();
+    } catch (e: any) {
+      showToast(e.response?.data?.message || e.response?.data || 'Joker kullanılamadı.');
+    } finally {
+      setJokerLoading(false);
+    }
+  };
+
+  const handleUseDoubleChance = async () => {
+    if (!user || (user.jokerDoubleChance ?? 0) <= 0 || !currentQuestion || isEliminated) return;
+    if (doubleChanceActiveMap[currentQuestion.id]) {
+      showToast('⚠️ Bu soruda zaten çift cevap jokeri aktif.');
+      return;
+    }
+
+    setJokerLoading(true);
+    try {
+      await useJoker('double_chance');
+      await refreshUser();
+
+      setDoubleChanceActiveMap(prev => ({
+        ...prev,
+        [currentQuestion.id]: true
+      }));
+
+      const curr = answers[currentQuestion.id];
+      if (curr) {
+        setSelectedDoubleChoicesMap(prev => ({
+          ...prev,
+          [currentQuestion.id]: curr.split(',').filter(Boolean)
+        }));
+      }
+
+      showToast('✌️ Çift Cevap Jokeri Aktif! Şimdi 2 şık seçebilirsin.');
+      triggerPodiumConfetti();
+    } catch (e: any) {
+      showToast(e.response?.data?.message || e.response?.data || 'Joker kullanılamadı.');
+    } finally {
+      setJokerLoading(false);
+    }
+  };
+
+  const handleUseExtraTime = async () => {
+    if (!user || (user.jokerExtraTime ?? 0) <= 0 || isEliminated) return;
+
+    setJokerLoading(true);
+    try {
+      await useJoker('extra_time');
+      await refreshUser();
+
+      setMatchDurationSeconds(prev => prev + 15);
+      showToast('⏳ Toplam Sürene +15 Saniye Eklendi!');
+      triggerPodiumConfetti();
+    } catch (e: any) {
+      showToast(e.response?.data?.message || e.response?.data || 'Joker kullanılamadı.');
+    } finally {
+      setJokerLoading(false);
+    }
+  };
+
   const handleSelectChoice = (questionId: string, choiceKey: string) => {
     if (isEliminated) return;
+
+    // Block if choice was eliminated
+    if (eliminatedChoicesMap[questionId]?.includes(choiceKey)) {
+      showToast('🚫 Bu şık elenmiştir, seçilemez.');
+      return;
+    }
+
+    const isDoubleChance = doubleChanceActiveMap[questionId];
+
+    if (isDoubleChance) {
+      const currentSelected = selectedDoubleChoicesMap[questionId] || [];
+      let newSelected: string[];
+
+      if (currentSelected.includes(choiceKey)) {
+        newSelected = currentSelected.filter(k => k !== choiceKey);
+      } else if (currentSelected.length < 2) {
+        newSelected = [...currentSelected, choiceKey];
+      } else {
+        newSelected = [currentSelected[1], choiceKey];
+      }
+
+      setSelectedDoubleChoicesMap(prev => ({
+        ...prev,
+        [questionId]: newSelected
+      }));
+
+      const answerValue = newSelected.length > 0 ? newSelected.join(',') : null;
+
+      const newAnswers = {
+        ...answers,
+        [questionId]: answerValue
+      };
+      setAnswers(newAnswers);
+
+      const answeredCount = Object.values(newAnswers).filter(a => a !== null).length;
+      if (connection && roomCode && connection.state === 'Connected') {
+        connection.invoke('UpdateProgress', roomCode, currentQuestionIndex, answeredCount, questionId, answerValue).catch(() => {});
+      }
+      return;
+    }
 
     const newChoice = answers[questionId] === choiceKey ? null : choiceKey;
     const newAnswers = {
@@ -699,6 +855,65 @@ export default function LobbyPage() {
               </div>
             </div>
 
+            {/* IN-MATCH JOKER TOOLBAR */}
+            <div className="bg-[#121533] border border-amber-400/30 rounded-2xl p-2 flex items-center justify-between gap-1.5 shadow-lg">
+              <div className="text-[10px] font-black text-amber-300 uppercase flex items-center gap-1 pl-1 shrink-0">
+                <span>🃏</span> <span>Jokerler</span>
+              </div>
+
+              <div className="flex items-center gap-1.5 flex-1 justify-end">
+                {/* Joker 1: 3 Şık Eleme */}
+                <button
+                  onClick={handleUseEliminateThree}
+                  disabled={jokerLoading || isEliminated || (user?.jokerEliminateThree ?? 0) <= 0 || (currentQuestion && (eliminatedChoicesMap[currentQuestion.id]?.length ?? 0) > 0)}
+                  title="3 Yanlış Şıkkı Ele"
+                  className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[10px] font-black transition-all cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed ${
+                    currentQuestion && (eliminatedChoicesMap[currentQuestion.id]?.length ?? 0) > 0
+                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                      : 'bg-[#1c2148] hover:bg-[#252b5e] text-white border border-white/10 active:scale-95'
+                  }`}
+                >
+                  <span className="text-xs">🎯</span>
+                  <span>3 Ele</span>
+                  <span className="bg-amber-400 text-slate-950 px-1 py-0.2 rounded font-black text-[9px]">
+                    {user?.jokerEliminateThree ?? 0}
+                  </span>
+                </button>
+
+                {/* Joker 2: Çift Cevap */}
+                <button
+                  onClick={handleUseDoubleChance}
+                  disabled={jokerLoading || isEliminated || (user?.jokerDoubleChance ?? 0) <= 0 || (currentQuestion && doubleChanceActiveMap[currentQuestion.id])}
+                  title="2 Şık İşaretleme Hakkı"
+                  className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[10px] font-black transition-all cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed ${
+                    currentQuestion && doubleChanceActiveMap[currentQuestion.id]
+                      ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 animate-pulse'
+                      : 'bg-[#1c2148] hover:bg-[#252b5e] text-white border border-white/10 active:scale-95'
+                  }`}
+                >
+                  <span className="text-xs">✌️</span>
+                  <span>Çift Hak</span>
+                  <span className="bg-cyan-400 text-slate-950 px-1 py-0.2 rounded font-black text-[9px]">
+                    {user?.jokerDoubleChance ?? 0}
+                  </span>
+                </button>
+
+                {/* Joker 3: +15 Sn Süre */}
+                <button
+                  onClick={handleUseExtraTime}
+                  disabled={jokerLoading || isEliminated || (user?.jokerExtraTime ?? 0) <= 0}
+                  title="Düello Süresine +15 Saniye Ekle"
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[10px] font-black bg-[#1c2148] hover:bg-[#252b5e] text-white border border-white/10 active:scale-95 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  <span className="text-xs">⏳</span>
+                  <span>+15s</span>
+                  <span className="bg-emerald-400 text-slate-950 px-1 py-0.2 rounded font-black text-[9px]">
+                    {user?.jokerExtraTime ?? 0}
+                  </span>
+                </button>
+              </div>
+            </div>
+
             {/* Question Text Box */}
             {currentQuestion ? (
               <div className="game-card-3d p-4 flex flex-col space-y-3">
@@ -718,28 +933,44 @@ export default function LobbyPage() {
                 </div>
 
                 {/* Choices */}
-                <div className="space-y-2 pt-2">
-                  {Object.entries(currentQuestion.choices).map(([key, text]) => {
-                    const isSelected = answers[currentQuestion.id] === key;
+                <div className="space-y-2.5 pt-2">
+                  {Object.entries(currentQuestion.choices)
+                    .filter(([key]) => !eliminatedChoicesMap[currentQuestion.id]?.includes(key))
+                    .map(([key, text]) => {
+                      const isDoubleActive = doubleChanceActiveMap[currentQuestion.id];
+                      const isSelected = isDoubleActive
+                        ? (selectedDoubleChoicesMap[currentQuestion.id] || []).includes(key)
+                        : answers[currentQuestion.id] === key;
 
-                    return (
-                      <button
-                        key={key}
-                        disabled={isEliminated}
-                        onClick={() => handleSelectChoice(currentQuestion.id, key)}
-                        className={`w-full text-left p-3 rounded-2xl flex items-center font-bold text-xs cursor-pointer select-none disabled:opacity-40 transition-all ${
-                          isSelected ? 'btn-game-choice selected' : 'btn-game-choice text-slate-200'
-                        }`}
-                      >
-                        <span className={`w-7 h-7 rounded-xl flex items-center justify-center mr-3 text-xs font-black font-mono shrink-0 ${
-                          isSelected ? 'bg-white text-purple-900 shadow' : 'bg-black/30 text-slate-400'
-                        }`}>
-                          {key}
-                        </span>
-                        <span className="flex-1 leading-snug">{text}</span>
-                      </button>
-                    );
-                  })}
+                      const choiceIndex = isDoubleActive && isSelected
+                        ? (selectedDoubleChoicesMap[currentQuestion.id] || []).indexOf(key) + 1
+                        : 0;
+
+                      return (
+                        <button
+                          key={key}
+                          disabled={isEliminated}
+                          onClick={() => handleSelectChoice(currentQuestion.id, key)}
+                          className={`w-full text-left p-3.5 rounded-2xl flex items-center font-bold text-xs cursor-pointer select-none disabled:opacity-40 transition-all ${
+                            isSelected
+                              ? 'btn-game-choice selected shadow-lg border-2 border-cyan-400 bg-gradient-to-r from-violet-600/40 to-cyan-500/40'
+                              : 'btn-game-choice text-slate-200 hover:border-white/20'
+                          }`}
+                        >
+                          <span className={`w-8 h-8 rounded-xl flex items-center justify-center mr-3 text-xs font-black font-mono shrink-0 transition-colors ${
+                            isSelected ? 'bg-cyan-400 text-slate-950 shadow-md font-extrabold' : 'bg-black/30 text-slate-400'
+                          }`}>
+                            {key}
+                          </span>
+                          <span className="flex-1 leading-snug text-slate-100">{text}</span>
+                          {isDoubleActive && isSelected && (
+                            <span className="text-[10px] bg-gradient-to-r from-cyan-400 to-blue-500 text-slate-950 font-black px-2 py-0.5 rounded-lg ml-2 shrink-0 shadow animate-pulse">
+                              {choiceIndex}. Seçim ✓
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
                 </div>
               </div>
             ) : (

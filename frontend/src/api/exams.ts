@@ -13,6 +13,7 @@ export interface SoloQuestion {
   branch: string;
   questionText: string;
   choices: Record<string, string>;
+  correctAnswer?: string;
   imageUrl?: string;
 }
 

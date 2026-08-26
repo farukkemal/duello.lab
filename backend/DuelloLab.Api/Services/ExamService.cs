@@ -137,6 +137,18 @@ public class ExamService : IExamService
             {
                 blankCount++;
             }
+            else if (answer.SelectedAnswer.Contains(","))
+            {
+                var options = answer.SelectedAnswer.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                if (options.Any(opt => opt.Equals(question.CorrectAnswer, StringComparison.OrdinalIgnoreCase)))
+                {
+                    correctCount++;
+                }
+                else
+                {
+                    wrongCount++;
+                }
+            }
             else if (answer.SelectedAnswer.Equals(question.CorrectAnswer, StringComparison.OrdinalIgnoreCase))
             {
                 correctCount++;

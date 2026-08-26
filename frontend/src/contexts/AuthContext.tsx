@@ -27,7 +27,10 @@ const parseStoredUser = (): UserDto | null => {
       coinBalance: parsed.coinBalance ?? parsed.CoinBalance ?? 100,
       createdAt: parsed.createdAt || parsed.CreatedAt || '',
       role: parsed.role || parsed.Role || 'User',
-      isBanned: parsed.isBanned ?? parsed.IsBanned ?? false
+      isBanned: parsed.isBanned ?? parsed.IsBanned ?? false,
+      jokerEliminateThree: parsed.jokerEliminateThree ?? parsed.JokerEliminateThree ?? 1,
+      jokerDoubleChance: parsed.jokerDoubleChance ?? parsed.JokerDoubleChance ?? 1,
+      jokerExtraTime: parsed.jokerExtraTime ?? parsed.JokerExtraTime ?? 1
     };
   } catch {
     return null;

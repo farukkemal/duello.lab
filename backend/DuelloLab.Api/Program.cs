@@ -220,6 +220,9 @@ using (var scope = app.Services.CreateScope())
 
             ALTER TABLE ""Users"" ADD COLUMN IF NOT EXISTS ""Role"" varchar(20) NOT NULL DEFAULT 'User';
             ALTER TABLE ""Users"" ADD COLUMN IF NOT EXISTS ""IsBanned"" boolean NOT NULL DEFAULT false;
+            ALTER TABLE ""Users"" ADD COLUMN IF NOT EXISTS ""JokerEliminateThree"" integer NOT NULL DEFAULT 1;
+            ALTER TABLE ""Users"" ADD COLUMN IF NOT EXISTS ""JokerDoubleChance"" integer NOT NULL DEFAULT 1;
+            ALTER TABLE ""Users"" ADD COLUMN IF NOT EXISTS ""JokerExtraTime"" integer NOT NULL DEFAULT 1;
         ");
 
         if (app.Environment.IsDevelopment())

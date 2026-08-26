@@ -11,4 +11,7 @@ public class UserDto
     public DateTime CreatedAt { get; set; }
     public string Role { get; set; } = "User";
     public bool IsBanned { get; set; }
+    public int JokerEliminateThree { get; set; }
+    public int JokerDoubleChance { get; set; }
+    public int JokerExtraTime { get; set; }
 }

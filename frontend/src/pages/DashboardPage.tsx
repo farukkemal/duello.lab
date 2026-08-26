@@ -65,7 +65,7 @@ export default function DashboardPage() {
   const [modalError, setModalError] = useState<string | null>(null);
 
   // Profile & Analytics state
-  const [profileSubTab, setProfileSubTab] = useState<'analizler' | 'genel' | 'ayarlar'>('analizler');
+  const [profileSubTab, setProfileSubTab] = useState<'analizler' | 'genel' | 'envanter' | 'ayarlar'>('analizler');
   const [aiReport, setAiReport] = useState<AiCoachReport | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [soundMuted, setSoundMuted] = useState(isAudioMuted());
@@ -356,6 +356,63 @@ export default function DashboardPage() {
                     >
                       🚪 Oturumu Kapat
                     </button>
+                  </div>
+
+                  {/* Joker Inventory Card in Desktop Profile */}
+                  <div className="game-card-3d p-5 text-left space-y-3 bg-gradient-to-b from-[#161a3d] to-[#0f122c] border-amber-400/30">
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm font-black text-white flex items-center gap-2">
+                        <span>🎒</span>
+                        <span>Düello Jokerlerim</span>
+                      </div>
+                      <button
+                        onClick={() => navigate('/shop')}
+                        className="text-[10px] text-amber-300 font-bold hover:underline cursor-pointer"
+                      >
+                        + Mağaza
+                      </button>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between p-2.5 bg-black/40 rounded-xl border border-white/5">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xl">🎯</span>
+                          <div>
+                            <div className="text-xs font-bold text-white">3 Şık Eleme</div>
+                            <div className="text-[10px] text-slate-400">3 yanlış şıkkı eler</div>
+                          </div>
+                        </div>
+                        <span className="font-mono font-black text-sm text-amber-300 bg-amber-400/10 px-2 py-0.5 rounded-lg border border-amber-400/20">
+                          {user?.jokerEliminateThree ?? 0} Adet
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between p-2.5 bg-black/40 rounded-xl border border-white/5">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xl">✌️</span>
+                          <div>
+                            <div className="text-xs font-bold text-white">Çift Cevap Hakkı</div>
+                            <div className="text-[10px] text-slate-400">2 şık seçme imkanı</div>
+                          </div>
+                        </div>
+                        <span className="font-mono font-black text-sm text-cyan-300 bg-cyan-400/10 px-2 py-0.5 rounded-lg border border-cyan-400/20">
+                          {user?.jokerDoubleChance ?? 0} Adet
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between p-2.5 bg-black/40 rounded-xl border border-white/5">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xl">⏳</span>
+                          <div>
+                            <div className="text-xs font-bold text-white">+15 Sn Ekstra Süre</div>
+                            <div className="text-[10px] text-slate-400">Maç sürene 15 sn ekler</div>
+                          </div>
+                        </div>
+                        <span className="font-mono font-black text-sm text-emerald-300 bg-emerald-400/10 px-2 py-0.5 rounded-lg border border-emerald-400/20">
+                          {user?.jokerExtraTime ?? 0} Adet
+                        </span>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -1077,33 +1134,43 @@ export default function DashboardPage() {
               <div className="flex bg-[#0f122c] p-1 rounded-2xl border border-white/10 gap-1 shadow-inner">
                 <button
                   onClick={() => setProfileSubTab('analizler')}
-                  className={`flex-1 py-2 rounded-xl text-[11px] font-black uppercase transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                  className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase transition-all flex items-center justify-center gap-1 cursor-pointer ${
                     profileSubTab === 'analizler'
                       ? 'bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-lg'
                       : 'text-slate-400 hover:text-slate-200'
                   }`}
                 >
-                  <span>🧠</span> <span>AI & Analizler</span>
+                  <span>🧠</span> <span>AI</span>
+                </button>
+                <button
+                  onClick={() => setProfileSubTab('envanter')}
+                  className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                    profileSubTab === 'envanter'
+                      ? 'bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-lg'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <span>🎒</span> <span>Envanter</span>
                 </button>
                 <button
                   onClick={() => setProfileSubTab('genel')}
-                  className={`flex-1 py-2 rounded-xl text-[11px] font-black uppercase transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                  className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase transition-all flex items-center justify-center gap-1 cursor-pointer ${
                     profileSubTab === 'genel'
                       ? 'bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-lg'
                       : 'text-slate-400 hover:text-slate-200'
                   }`}
                 >
-                  <span>📊</span> <span>Genel Bakış</span>
+                  <span>📊</span> <span>Genel</span>
                 </button>
                 <button
                   onClick={() => setProfileSubTab('ayarlar')}
-                  className={`flex-1 py-2 rounded-xl text-[11px] font-black uppercase transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                  className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase transition-all flex items-center justify-center gap-1 cursor-pointer ${
                     profileSubTab === 'ayarlar'
                       ? 'bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-lg'
                       : 'text-slate-400 hover:text-slate-200'
                   }`}
                 >
-                  <span>⚙️</span> <span>Ayarlar</span>
+                  <span>⚙️</span> <span>Ayar</span>
                 </button>
               </div>
 
@@ -1246,6 +1313,66 @@ export default function DashboardPage() {
                       </div>
                     </>
                   )}
+                </div>
+              )}
+
+              {/* SUB-TAB CONTENT: ENVANTER & JOKERLER */}
+              {profileSubTab === 'envanter' && (
+                <div className="space-y-3 animate-fadeIn">
+                  <div className="bg-[#121533] border border-amber-400/30 rounded-2xl p-4 space-y-3 shadow-lg">
+                    <div className="flex items-center justify-between">
+                      <div className="text-xs font-black text-white flex items-center gap-1.5">
+                        <span>🎒</span> <span>Düello Jokerlerim</span>
+                      </div>
+                      <button
+                        onClick={() => navigate('/shop')}
+                        className="text-[10px] text-amber-300 font-bold bg-amber-400/15 border border-amber-400/30 px-2 py-0.5 rounded-lg active:scale-95 transition"
+                      >
+                        + Mağazadan Al
+                      </button>
+                    </div>
+
+                    <div className="space-y-2.5">
+                      <div className="flex items-center justify-between p-3 bg-black/40 rounded-xl border border-white/5">
+                        <div className="flex items-center gap-2.5">
+                          <span className="text-2xl">🎯</span>
+                          <div className="text-left">
+                            <div className="text-xs font-bold text-white">3 Şık Eleme Jokeri</div>
+                            <div className="text-[10px] text-slate-400">3 yanlış şıkkı eler</div>
+                          </div>
+                        </div>
+                        <span className="font-mono font-black text-xs text-amber-300 bg-amber-400/10 px-2.5 py-1 rounded-lg border border-amber-400/20">
+                          {user?.jokerEliminateThree ?? 0} Adet
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between p-3 bg-black/40 rounded-xl border border-white/5">
+                        <div className="flex items-center gap-2.5">
+                          <span className="text-2xl">✌️</span>
+                          <div className="text-left">
+                            <div className="text-xs font-bold text-white">Çift Cevap Hakkı</div>
+                            <div className="text-[10px] text-slate-400">2 şık seçme imkanı</div>
+                          </div>
+                        </div>
+                        <span className="font-mono font-black text-xs text-cyan-300 bg-cyan-400/10 px-2.5 py-1 rounded-lg border border-cyan-400/20">
+                          {user?.jokerDoubleChance ?? 0} Adet
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between p-3 bg-black/40 rounded-xl border border-white/5">
+                        <div className="flex items-center gap-2.5">
+                          <span className="text-2xl">⏳</span>
+                          <div className="text-left">
+                            <div className="text-xs font-bold text-white">+15 Sn Ekstra Süre</div>
+                            <div className="text-[10px] text-slate-400">Maç sürene 15 sn ekler</div>
+                          </div>
+                        </div>
+                        <span className="font-mono font-black text-xs text-emerald-300 bg-emerald-400/10 px-2.5 py-1 rounded-lg border border-emerald-400/20">
+                          {user?.jokerExtraTime ?? 0} Adet
+                        </span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
 

@@ -4,7 +4,7 @@ import { type UserDto } from './auth';
 export interface StoreProduct {
   id: string;
   name: string;
-  category: 'coins' | 'powerup' | 'cosmetic';
+  category: 'coins' | 'joker' | 'powerup' | 'cosmetic';
   coinAmount: number;
   bonusCoins: number;
   priceTry: number;
@@ -21,6 +21,12 @@ export interface DailyChestResult {
   user: UserDto;
 }
 
+export interface UseJokerResponse {
+  user: UserDto;
+  eliminatedChoices: string[];
+  message: string;
+}
+
 export const getStoreProducts = () =>
   api.get<StoreProduct[]>('/store/products');
 
@@ -29,6 +35,9 @@ export const buyCoinPack = (packId: string) =>
 
 export const buyStoreItem = (itemId: string) =>
   api.post<UserDto>('/store/buy-item', { itemId });
+
+export const useJoker = (jokerType: 'eliminate_three' | 'double_chance' | 'extra_time', questionId?: string) =>
+  api.post<UseJokerResponse>('/store/use-joker', { jokerType, questionId });
 
 export const openDailyChest = () =>
   api.post<DailyChestResult>('/store/daily-chest');

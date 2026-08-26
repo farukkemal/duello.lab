@@ -319,6 +319,20 @@ public class RoomService : IRoomService
             {
                 blankCount++;
             }
+            else if (answer.SelectedAnswer.Contains(","))
+            {
+                // Double chance joker used (e.g. "A,C")
+                var selectedOptions = answer.SelectedAnswer
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                if (selectedOptions.Any(opt => opt.Equals(q.CorrectAnswer.Trim(), StringComparison.OrdinalIgnoreCase)))
+                {
+                    correctCount++;
+                }
+                else
+                {
+                    wrongCount++;
+                }
+            }
             else if (answer.SelectedAnswer.Trim().Equals(q.CorrectAnswer.Trim(), StringComparison.OrdinalIgnoreCase))
             {
                 correctCount++;
@@ -463,10 +477,22 @@ public class RoomService : IRoomService
 
                     if (roomUser.UserAnswers.TryGetValue(qId, out var selected) && !string.IsNullOrWhiteSpace(selected))
                     {
-                        if (selected.Trim().Equals(q.CorrectAnswer.Trim(), StringComparison.OrdinalIgnoreCase))
+                        if (selected.Contains(","))
+                        {
+                            var selectedOptions = selected.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                            if (selectedOptions.Any(opt => opt.Equals(q.CorrectAnswer.Trim(), StringComparison.OrdinalIgnoreCase)))
+                                correctCount++;
+                            else
+                                wrongCount++;
+                        }
+                        else if (selected.Trim().Equals(q.CorrectAnswer.Trim(), StringComparison.OrdinalIgnoreCase))
+                        {
                             correctCount++;
+                        }
                         else
+                        {
                             wrongCount++;
+                        }
                     }
                     else
                     {

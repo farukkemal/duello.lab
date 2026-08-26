@@ -17,11 +17,24 @@ public class BuyItemDto
     public string ItemId { get; set; } = string.Empty;
 }
 
+public class UseJokerDto
+{
+    public string JokerType { get; set; } = string.Empty; // "eliminate_three" | "double_chance" | "extra_time"
+    public Guid? QuestionId { get; set; }
+}
+
+public class UseJokerResponseDto
+{
+    public UserDto User { get; set; } = null!;
+    public List<string> EliminatedChoices { get; set; } = new();
+    public string Message { get; set; } = string.Empty;
+}
+
 public class StoreProductDto
 {
     public string Id { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
-    public string Category { get; set; } = "coins"; // "coins" | "powerup" | "cosmetic"
+    public string Category { get; set; } = "coins"; // "coins" | "joker" | "cosmetic"
     public int CoinAmount { get; set; }
     public int BonusCoins { get; set; }
     public decimal PriceTry { get; set; }
@@ -80,7 +93,7 @@ public class StoreController : ControllerBase
                 BonusCoins = 25,
                 PriceTry = 29.99m,
                 Icon = "💰",
-                Description = "5 özel düello odası kurmak için ideal paket.",
+                Description = "Özel düello odaları kurmak ve joker stoklamak için ideal paket.",
                 Tag = "POPÜLER"
             },
             new()
@@ -104,40 +117,40 @@ public class StoreController : ControllerBase
                 BonusCoins = 300,
                 PriceTry = 119.99m,
                 Icon = "👑",
-                Description = "En yüksek değer! 30 düello odası ve +300 bonus coin.",
+                Description = "En yüksek değer! Sınırsız düellolar ve +300 bonus coin.",
                 Tag = "EN İYİ FİYAT"
             },
 
-            // POWERUPS
+            // JOKERS (DÜELLO JOKERLERİ)
             new()
             {
-                Id = "item_xp_boost",
-                Name = "2x XP İksiri",
-                Category = "powerup",
+                Id = "joker_eliminate_three",
+                Name = "3 Şık Eleme Jokeri",
+                Category = "joker",
+                CostCoins = 40,
+                Icon = "🎯",
+                Description = "Sorudaki 3 yanlış şıkkı anında eler, geriye 1 doğru 1 yanlış şık bırakır.",
+                Tag = "JOKER"
+            },
+            new()
+            {
+                Id = "joker_double_chance",
+                Name = "Çift Cevap Hakkı Jokeri",
+                Category = "joker",
                 CostCoins = 50,
-                Icon = "⚡",
-                Description = "Çözülen tüm sorularda 1 saat boyunca çift XP kazandırır.",
-                Tag = "GÜÇLENDİRME"
+                Icon = "✌️",
+                Description = "Aynı soruda 2 farklı şık seçmene izin verir. Biri doğruysa soru tam doğru sayılır!",
+                Tag = "JOKER"
             },
             new()
             {
-                Id = "item_shield",
-                Name = "Puan Kalkanı",
-                Category = "powerup",
-                CostCoins = 75,
-                Icon = "🛡️",
-                Description = "Gelecek 1 maçta 1 yanlış cevabın doğruyu götürmesini engeller.",
-                Tag = "KORUMA"
-            },
-            new()
-            {
-                Id = "item_gold_frame",
-                Name = "Altın Gladyatör Çerçevesi",
-                Category = "cosmetic",
-                CostCoins = 200,
-                Icon = "✨",
-                Description = "Profiline ve lobi kartına altın ışıltılı özel çerçeve kazandırır.",
-                Tag = "KOZMETİK"
+                Id = "joker_extra_time",
+                Name = "+15 Sn Ekstra Süre Jokeri",
+                Category = "joker",
+                CostCoins = 35,
+                Icon = "⏳",
+                Description = "Kullandığın an düello sürene sadece senin için +15 saniye ekler.",
+                Tag = "SÜRE"
             }
         };
 
@@ -173,24 +186,106 @@ public class StoreController : ControllerBase
         var user = await _db.Users.FindAsync(userId);
         if (user == null) return NotFound("Kullanıcı bulunamadı.");
 
-        int cost = dto.ItemId switch
+        int cost;
+        switch (dto.ItemId)
         {
-            "item_xp_boost" => 50,
-            "item_shield" => 75,
-            "item_gold_frame" => 200,
-            _ => 50
-        };
+            case "joker_eliminate_three":
+                cost = 40;
+                if (user.CoinBalance < cost) return BadRequest($"Yetersiz bakiye! Bu joker için {cost} Coin gereklidir.");
+                user.JokerEliminateThree++;
+                break;
 
-        if (user.CoinBalance < cost)
-            return BadRequest($"Yetersiz bakiye! Bu eşya için {cost} Coin gereklidir. Bakiyeniz: {user.CoinBalance} Coin.");
+            case "joker_double_chance":
+                cost = 50;
+                if (user.CoinBalance < cost) return BadRequest($"Yetersiz bakiye! Bu joker için {cost} Coin gereklidir.");
+                user.JokerDoubleChance++;
+                break;
+
+            case "joker_extra_time":
+                cost = 35;
+                if (user.CoinBalance < cost) return BadRequest($"Yetersiz bakiye! Bu joker için {cost} Coin gereklidir.");
+                user.JokerExtraTime++;
+                break;
+
+            case "item_xp_boost":
+                cost = 50;
+                if (user.CoinBalance < cost) return BadRequest($"Yetersiz bakiye! Bu eşya için {cost} Coin gereklidir.");
+                break;
+
+            case "item_shield":
+                cost = 75;
+                if (user.CoinBalance < cost) return BadRequest($"Yetersiz bakiye! Bu eşya için {cost} Coin gereklidir.");
+                break;
+
+            default:
+                return BadRequest("Geçersiz ürün.");
+        }
 
         user.CoinBalance -= cost;
-        user.XP += 25; // Item purchase gives bonus XP
+        user.XP += 15; // Joker purchase gives +15 XP bonus
         user.Level = (user.XP / 1000) + 1;
 
         await _db.SaveChangesAsync();
 
         return Ok(MapToUserDto(user));
+    }
+
+    [HttpPost("use-joker")]
+    public async Task<ActionResult<UseJokerResponseDto>> UseJoker([FromBody] UseJokerDto dto)
+    {
+        var userId = GetUserId();
+        var user = await _db.Users.FindAsync(userId);
+        if (user == null) return NotFound("Kullanıcı bulunamadı.");
+
+        var eliminatedChoices = new List<string>();
+
+        switch (dto.JokerType)
+        {
+            case "eliminate_three":
+            case "joker_eliminate_three":
+                if (user.JokerEliminateThree <= 0) return BadRequest("3 Şık Eleme Jokeriniz kalmadı!");
+
+                if (dto.QuestionId.HasValue)
+                {
+                    var q = await _db.Questions.FindAsync(dto.QuestionId.Value);
+                    if (q != null && q.Choices.Count > 2)
+                    {
+                        var correctKey = q.CorrectAnswer.Trim().ToUpperInvariant();
+                        var wrongKeys = q.Choices.Keys
+                            .Where(k => !k.Trim().Equals(correctKey, StringComparison.OrdinalIgnoreCase))
+                            .OrderBy(_ => Guid.NewGuid())
+                            .Take(3)
+                            .ToList();
+                        eliminatedChoices = wrongKeys;
+                    }
+                }
+
+                user.JokerEliminateThree--;
+                break;
+
+            case "double_chance":
+            case "joker_double_chance":
+                if (user.JokerDoubleChance <= 0) return BadRequest("Çift Cevap Hakkı Jokeriniz kalmadı!");
+                user.JokerDoubleChance--;
+                break;
+
+            case "extra_time":
+            case "joker_extra_time":
+                if (user.JokerExtraTime <= 0) return BadRequest("+15 Sn Süre Jokeriniz kalmadı!");
+                user.JokerExtraTime--;
+                break;
+
+            default:
+                return BadRequest("Geçersiz joker tipi.");
+        }
+
+        await _db.SaveChangesAsync();
+        return Ok(new UseJokerResponseDto
+        {
+            User = MapToUserDto(user),
+            EliminatedChoices = eliminatedChoices,
+            Message = "Joker başarıyla kullanıldı."
+        });
     }
 
     [HttpPost("daily-chest")]
@@ -228,6 +323,11 @@ public class StoreController : ControllerBase
         Level = u.Level,
         XP = u.XP,
         CoinBalance = u.CoinBalance,
-        CreatedAt = u.CreatedAt
+        CreatedAt = u.CreatedAt,
+        Role = u.Role,
+        IsBanned = u.IsBanned,
+        JokerEliminateThree = u.JokerEliminateThree,
+        JokerDoubleChance = u.JokerDoubleChance,
+        JokerExtraTime = u.JokerExtraTime
     };
 }

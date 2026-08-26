@@ -753,14 +753,14 @@ export default function ClanPage() {
                     {!myClan && (
                       <button
                         onClick={() => handleJoinClan(c.id)}
-                        disabled={user.level < c.minLevel || joiningClanId === c.id}
+                        disabled={(user?.level ?? 1) < c.minLevel}
                         className={`px-3 py-1.5 rounded-xl font-bold text-xs uppercase transition cursor-pointer disabled:opacity-40 ${
-                          user.level >= c.minLevel
+                          (user?.level ?? 1) >= c.minLevel
                             ? 'btn-game-primary text-white'
                             : 'bg-slate-800 text-slate-500 border border-white/5'
                         }`}
                       >
-                        {joiningClanId === c.id ? '...' : user.level < c.minLevel ? `Lv.${c.minLevel} Gerekli` : 'Katıl'}
+                        {(user?.level ?? 1) < c.minLevel ? `Lv.${c.minLevel} Gerekli` : 'Katıl'}
                       </button>
                     )}
                   </div>

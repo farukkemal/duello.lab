@@ -101,7 +101,15 @@ export default function ShopPage() {
   };
 
   const coinPacks = products.filter((p) => p.category === 'coins');
-  const items = products.filter((p) => p.category === 'powerup' || p.category === 'cosmetic');
+  const jokers = products.filter((p) => p.category === 'joker' || p.category === 'powerup' || p.category === 'cosmetic');
+
+  const getOwnedJokerCount = (id: string) => {
+    if (!user) return 0;
+    if (id === 'joker_eliminate_three') return user.jokerEliminateThree ?? 0;
+    if (id === 'joker_double_chance') return user.jokerDoubleChance ?? 0;
+    if (id === 'joker_extra_time') return user.jokerExtraTime ?? 0;
+    return 0;
+  };
 
   // ==========================================
   // DESKTOP STORE VIEWPORT RENDER
@@ -226,18 +234,19 @@ export default function ShopPage() {
             )}
           </div>
 
-          {/* 3. POWER-UPS & BOOSTERS (4-COLUMN DESKTOP GRID) */}
+          {/* 3. DÜELLO JOKERLERİ (4-COLUMN DESKTOP GRID) */}
           <div className="space-y-4">
             <div className="flex items-center justify-between border-b border-white/10 pb-2">
               <h3 className="text-base font-black text-white uppercase tracking-wider flex items-center gap-2">
-                <span>⚡</span> <span>Özel Güçlendirmeler & Eşyalar</span>
+                <span>🃏</span> <span>Düello Jokerleri & Güçlendiriciler</span>
               </h3>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {items.map((item) => {
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {jokers.map((item) => {
                 const isProcessing = processingId === item.id;
                 const canAfford = (user?.coinBalance ?? 0) >= item.costCoins;
+                const owned = getOwnedJokerCount(item.id);
 
                 return (
                   <div
@@ -245,8 +254,17 @@ export default function ShopPage() {
                     className="game-card-3d p-5 flex flex-col justify-between text-center relative overflow-hidden group hover:border-violet-400 transition-all"
                   >
                     <div className="space-y-2 py-2">
-                      <div className="text-4xl group-hover:scale-110 transition-transform">
-                        {item.icon || '✨'}
+                      <div className="flex justify-between items-center px-1">
+                        <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-violet-600/30 border border-violet-500/40 text-violet-300">
+                          {item.tag}
+                        </span>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-400/10 border border-amber-400/30 text-amber-300">
+                          Envanter: {owned} adet
+                        </span>
+                      </div>
+
+                      <div className="text-4xl group-hover:scale-110 transition-transform pt-1">
+                        {item.icon || '🃏'}
                       </div>
                       <h4 className="text-base font-black text-white">{item.name}</h4>
                       <p className="text-xs text-slate-300 line-clamp-2">{item.description}</p>
@@ -424,18 +442,19 @@ export default function ShopPage() {
             )}
           </div>
 
-          {/* 3. ITEMS & POWERUPS SECTION */}
+          {/* 3. DÜELLO JOKERLERİ SECTION */}
           <div className="space-y-3">
             <div className="flex items-center justify-between px-1">
               <h3 className="text-sm font-black text-white uppercase tracking-wider flex items-center gap-1.5">
-                <span>⚡</span> <span>Güçlendiriciler ve Eşyalar</span>
+                <span>🃏</span> <span>Düello Jokerleri</span>
               </h3>
             </div>
 
             <div className="space-y-2.5">
-              {items.map((item) => {
+              {jokers.map((item) => {
                 const isProcessing = processingId === item.id;
                 const canAfford = (user?.coinBalance ?? 0) >= item.costCoins;
+                const owned = getOwnedJokerCount(item.id);
 
                 return (
                   <div
@@ -444,7 +463,7 @@ export default function ShopPage() {
                   >
                     <div className="flex items-center gap-3">
                       <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-purple-600/30 to-cyan-500/30 border border-white/10 flex items-center justify-center text-2xl shrink-0">
-                        {item.icon}
+                        {item.icon || '🃏'}
                       </div>
                       <div className="text-left">
                         <div className="text-xs font-black text-white flex items-center gap-1.5">
@@ -456,6 +475,9 @@ export default function ShopPage() {
                         <p className="text-[10px] text-slate-400 mt-0.5 line-clamp-1">
                           {item.description}
                         </p>
+                        <div className="text-[10px] font-bold text-amber-300/80 mt-0.5">
+                          Envanter: {owned} Adet
+                        </div>
                       </div>
                     </div>
 

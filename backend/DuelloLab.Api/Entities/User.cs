@@ -13,6 +13,11 @@ public class User
     public string Role { get; set; } = "User"; // "User" | "Admin"
     public bool IsBanned { get; set; } = false;
 
+    // Jokers Inventory
+    public int JokerEliminateThree { get; set; } = 1;
+    public int JokerDoubleChance { get; set; } = 1;
+    public int JokerExtraTime { get; set; } = 1;
+
     // Navigation
     public ICollection<UserResult> UserResults { get; set; } = new List<UserResult>();
 }

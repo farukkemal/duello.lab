@@ -185,6 +185,9 @@ public class AuthService : IAuthService
         CoinBalance = user.CoinBalance,
         CreatedAt = user.CreatedAt,
         Role = user.Role,
-        IsBanned = user.IsBanned
+        IsBanned = user.IsBanned,
+        JokerEliminateThree = user.JokerEliminateThree,
+        JokerDoubleChance = user.JokerDoubleChance,
+        JokerExtraTime = user.JokerExtraTime
     };
 }
