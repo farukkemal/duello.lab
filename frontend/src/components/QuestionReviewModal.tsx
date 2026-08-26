@@ -82,10 +82,10 @@ export default function QuestionReviewModal({
 
   if (!isOpen) return null;
 
-  const filteredQuestions = review?.questions.filter((q) => {
+  const filteredQuestions = (Array.isArray(review?.questions) ? review.questions : []).filter((q) => {
     if (activeTab === 'wrong') return !q.isCorrect;
     return true;
-  }) || [];
+  });
 
   return (
     <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fadeIn">

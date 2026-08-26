@@ -37,8 +37,11 @@ export default function ShopPage() {
 
   useEffect(() => {
     getStoreProducts()
-      .then(({ data }) => setProducts(data))
-      .catch(console.error)
+      .then(({ data }) => setProducts(Array.isArray(data) ? data : []))
+      .catch((err) => {
+        console.error('Failed to load store products:', err);
+        setProducts([]);
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -100,8 +103,9 @@ export default function ShopPage() {
     }
   };
 
-  const coinPacks = products.filter((p) => p.category === 'coins');
-  const jokers = products.filter((p) => p.category === 'joker' || p.category === 'powerup' || p.category === 'cosmetic');
+  const safeProducts = Array.isArray(products) ? products : [];
+  const coinPacks = safeProducts.filter((p) => p?.category === 'coins');
+  const jokers = safeProducts.filter((p) => p?.category === 'joker' || p?.category === 'powerup' || p?.category === 'cosmetic');
 
   const getOwnedJokerCount = (id: string) => {
     if (!user) return 0;

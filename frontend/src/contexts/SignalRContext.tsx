@@ -46,19 +46,20 @@ export function SignalRProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    const apiBase = import.meta.env.VITE_API_URL 
-      ? import.meta.env.VITE_API_URL.replace(/\/$/, '')
-      : '';
+    const rawApiUrl = (import.meta.env.VITE_API_URL || '').trim();
+    if (!rawApiUrl && typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
+      console.warn('⚠️ [SignalR] VITE_API_URL is not set in environment variables! In production, ensure VITE_API_URL is set in Render Environment Variables (e.g. https://duello-api.onrender.com).');
+    }
+    const apiBase = rawApiUrl.replace(/\/$/, '');
     const hubUrl = `${apiBase}/hubs/duello`;
 
     const newConnection = new signalR.HubConnectionBuilder()
       .withUrl(hubUrl, {
         accessTokenFactory: () => token,
-        skipNegotiation: false,
-        transport: signalR.HttpTransportType.WebSockets | signalR.HttpTransportType.LongPolling
+        transport: signalR.HttpTransportType.WebSockets | signalR.HttpTransportType.LongPolling,
       })
       .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
-      .configureLogging(signalR.LogLevel.Information)
+      .configureLogging(signalR.LogLevel.Warning)
       .build();
 
     connectionRef.current = newConnection;

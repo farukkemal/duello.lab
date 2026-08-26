@@ -11,11 +11,13 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using StackExchange.Redis;
 
+// Load .env file if present
+EnvLoader.Load();
+
 var builder = WebApplication.CreateBuilder(args);
 
-// Database - configure Npgsql data source with dynamic JSON for JSONB
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
-    ?? throw new InvalidOperationException("Connection string not configured");
+// Database - configure Npgsql data source with dynamic JSON for JSONB & Supabase support
+var connectionString = EnvLoader.ResolveConnectionString(builder.Configuration);
 
 var dataSourceBuilder = new Npgsql.NpgsqlDataSourceBuilder(connectionString);
 dataSourceBuilder.EnableDynamicJson();
@@ -110,6 +112,15 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<MatchmakingService
 builder.Services.AddSingleton<IBotService, BotService>();
 
 
+// Forwarded Headers for reverse proxy hosting (Render, Railway, Linux Nginx)
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedFor | 
+                               Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedProto;
+    options.KnownIPNetworks.Clear();
+    options.KnownProxies.Clear();
+});
+
 // Controllers + JSON
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
@@ -117,7 +128,7 @@ builder.Services.AddControllers()
         options.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
     });
 
-// CORS - allow React frontend (local + Netlify / production) + SignalR credentials
+// CORS - allow React frontend (local + Render / Netlify / production) + SignalR credentials
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
@@ -132,6 +143,9 @@ builder.Services.AddCors(options =>
 builder.Services.AddOpenApi();
 
 var app = builder.Build();
+
+// Enable Forwarded Headers first
+app.UseForwardedHeaders();
 
 // Middleware pipeline
 app.UseMiddleware<ExceptionMiddleware>();
@@ -154,6 +168,15 @@ app.MapGet("/", () => Results.Ok(new
     status = "healthy", 
     service = "DuelloLab API", 
     version = "1.0.0", 
+    time = DateTime.UtcNow 
+}));
+
+app.MapGet("/hubs/duello", () => Results.Ok(new 
+{ 
+    status = "healthy", 
+    service = "DuelloLab SignalR Hub", 
+    endpoint = "/hubs/duello",
+    transports = new[] { "WebSockets", "LongPolling" },
     time = DateTime.UtcNow 
 }));
 
@@ -225,10 +248,8 @@ using (var scope = app.Services.CreateScope())
             ALTER TABLE ""Users"" ADD COLUMN IF NOT EXISTS ""JokerExtraTime"" integer NOT NULL DEFAULT 1;
         ");
 
-        if (app.Environment.IsDevelopment())
-        {
-            await ExamSeeder.SeedAsync(db, app.Environment.ContentRootPath);
-        }
+        // Seed default exam and battleground questions if empty
+        await ExamSeeder.SeedAsync(db, app.Environment.ContentRootPath);
 
         // Seed founder accounts as Admin
         var founders = new[] { "meteogr", "farukkemal" };

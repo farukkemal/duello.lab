@@ -93,12 +93,12 @@ export default function DesktopClanView({
           {/* Members List */}
           <div className="game-card-3d p-4 space-y-3">
             <div className="flex items-center justify-between border-b border-white/10 pb-2">
-              <span className="text-xs font-black text-white">Klan Üyeleri ({myClan.members.length})</span>
+              <span className="text-xs font-black text-white">Klan Üyeleri ({Array.isArray(myClan?.members) ? myClan.members.length : 0})</span>
               <span className="text-slate-400 text-[10px]">Lider: {myClan.leaderUsername}</span>
             </div>
 
             <div className="space-y-2 max-h-72 overflow-y-auto no-scrollbar">
-              {myClan.members.map((m) => (
+              {(Array.isArray(myClan?.members) ? myClan.members : []).map((m) => (
                 <div
                   key={m.userId}
                   className="bg-black/30 hover:bg-white/5 border border-white/5 rounded-xl p-2.5 flex items-center justify-between transition"
@@ -180,7 +180,7 @@ export default function DesktopClanView({
                 </span>
               </div>
             ) : (
-              messages.map((msg) => {
+              (Array.isArray(messages) ? messages : []).map((msg) => {
                 const isMe = msg.userId === user?.id;
                 const isLeader = msg.role === 2;
                 const isElder = msg.role === 1;

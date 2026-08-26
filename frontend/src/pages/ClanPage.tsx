@@ -63,10 +63,11 @@ export default function ClanPage() {
     setChatLoading(true);
     try {
       const { data } = await getClanMessages(clanId, 50);
-      setMessages(data);
+      setMessages(Array.isArray(data) ? data : []);
       setTimeout(scrollToBottom, 100);
     } catch (e) {
       console.error('Failed to load clan messages:', e);
+      setMessages([]);
     } finally {
       setChatLoading(false);
     }
@@ -80,14 +81,17 @@ export default function ClanPage() {
         getTopClans(20)
       ]);
       setMyClan(myClanRes.data);
-      setTopClans(topRes.data);
-      setSearchResults(topRes.data);
+      const safeTop = Array.isArray(topRes.data) ? topRes.data : [];
+      setTopClans(safeTop);
+      setSearchResults(safeTop);
 
       if (myClanRes.data) {
         loadChatMessages(myClanRes.data.id);
       }
     } catch (e) {
       console.error(e);
+      setTopClans([]);
+      setSearchResults([]);
     } finally {
       setLoading(false);
     }
@@ -497,7 +501,7 @@ export default function ClanPage() {
                             </span>
                           </div>
                         ) : (
-                          messages.map((msg) => {
+                          (Array.isArray(messages) ? messages : []).map((msg) => {
                             const isMe = msg.userId === user?.id;
                             const isLeader = msg.role === 2;
                             const isElder = msg.role === 1;
@@ -635,11 +639,11 @@ export default function ClanPage() {
                       {/* Members List */}
                       <div className="space-y-2">
                         <div className="flex items-center justify-between text-xs font-black px-1">
-                          <span className="text-white">Klan Üyeleri ({myClan.members.length})</span>
+                          <span className="text-white">Klan Üyeleri ({Array.isArray(myClan?.members) ? myClan.members.length : 0})</span>
                           <span className="text-slate-400 text-[10px]">Lider: {myClan.leaderUsername}</span>
                         </div>
 
-                        {myClan.members.map((m) => (
+                        {(Array.isArray(myClan?.members) ? myClan.members : []).map((m) => (
                           <div
                             key={m.userId}
                             className="bg-[#171b38] border border-white/10 rounded-2xl p-3 flex items-center justify-between"
@@ -730,7 +734,7 @@ export default function ClanPage() {
               </form>
 
               <div className="space-y-2">
-                {searchResults.map((c) => (
+                {(Array.isArray(searchResults) ? searchResults : []).map((c) => (
                   <div
                     key={c.id}
                     className="game-card-3d p-3.5 flex items-center justify-between gap-3"
@@ -778,7 +782,7 @@ export default function ClanPage() {
                 🏆 Haftalık En Güçlü Loncalar
               </div>
 
-              {topClans.map((c, idx) => (
+              {(Array.isArray(topClans) ? topClans : []).map((c, idx) => (
                 <div
                   key={c.id}
                   className={`p-3.5 rounded-2xl border flex items-center justify-between ${

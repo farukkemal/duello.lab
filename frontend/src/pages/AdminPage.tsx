@@ -143,7 +143,7 @@ function UsersTab() {
           <tbody>
             {loading
               ? <tr><td colSpan={7} className="text-center py-8 text-[var(--color-text-muted)]">Yükleniyor...</td></tr>
-              : users.map(u => (
+              : (Array.isArray(users) ? users : []).map(u => (
                 <tr key={u.id} className="border-t border-[var(--color-border)] hover:bg-[var(--color-surface-secondary)] transition-colors">
                   <td className="px-4 py-3">
                     <div className="font-semibold text-[var(--color-text)]">{u.username}</div>
@@ -362,7 +362,7 @@ function QuestionsTab() {
           className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-[var(--color-text)] text-sm focus:outline-none focus:border-[var(--color-primary)]"
         >
           <option value="">Tüm Branşlar</option>
-          {branches.map(b => <option key={b} value={b}>{b}</option>)}
+          {(Array.isArray(branches) ? branches : []).map(b => <option key={b} value={b}>{b}</option>)}
         </select>
         <button onClick={openCreate} className="px-4 py-2 bg-[var(--color-primary)] text-white rounded-lg text-sm font-semibold hover:opacity-90 transition-opacity">
           ➕ Yeni Soru
@@ -374,7 +374,7 @@ function QuestionsTab() {
         <div className="text-center py-10 text-[var(--color-text-muted)]">Yükleniyor...</div>
       ) : (
         <div className="grid gap-3">
-          {questions.map(q => (
+          {(Array.isArray(questions) ? questions : []).map(q => (
             <div key={q.id} className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-4 flex gap-4 items-start">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1 flex-wrap">
@@ -384,7 +384,7 @@ function QuestionsTab() {
                 </div>
                 <p className="text-sm text-[var(--color-text)] line-clamp-2">{q.questionText}</p>
                 <div className="flex flex-wrap gap-1 mt-2">
-                  {Object.entries(q.choices).map(([k, v]) => (
+                  {Object.entries(q?.choices || {}).map(([k, v]) => (
                     <span key={k} className={`text-xs px-2 py-0.5 rounded-full ${k === q.correctAnswer ? 'bg-green-500/20 text-green-400' : 'bg-[var(--color-surface-secondary)] text-[var(--color-text-muted)]'}`}>
                       {k}: {v.substring(0, 30)}{v.length > 30 ? '...' : ''}
                     </span>
@@ -424,14 +424,14 @@ function QuestionsTab() {
               <label className="flex flex-col gap-1 col-span-2">
                 <span className="text-xs text-[var(--color-text-muted)]">Sınav</span>
                 <select value={form.examId} onChange={e => setForm(f => ({ ...f, examId: e.target.value }))} className="bg-[var(--color-surface-secondary)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-[var(--color-text)] text-sm focus:outline-none">
-                  {exams.map(e => <option key={e.id} value={e.id}>{e.title} ({e.questionCount} soru)</option>)}
+                  {(Array.isArray(exams) ? exams : []).map(e => <option key={e.id} value={e.id}>{e.title} ({e.questionCount} soru)</option>)}
                 </select>
               </label>
               <label className="flex flex-col gap-1">
                 <span className="text-xs text-[var(--color-text-muted)]">Branş</span>
                 <select value={form.branch} onChange={e => setForm(f => ({ ...f, branch: e.target.value }))} className="bg-[var(--color-surface-secondary)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-[var(--color-text)] text-sm focus:outline-none">
                   <option value="">Seçin</option>
-                  {branches.map(b => <option key={b} value={b}>{b}</option>)}
+                  {(Array.isArray(branches) ? branches : []).map(b => <option key={b} value={b}>{b}</option>)}
                 </select>
               </label>
               <label className="flex flex-col gap-1">
@@ -519,7 +519,7 @@ function RoomsTab() {
       </div>
       {loading ? (
         <div className="text-center py-10 text-[var(--color-text-muted)]">Yükleniyor...</div>
-      ) : rooms.length === 0 ? (
+      ) : !Array.isArray(rooms) || rooms.length === 0 ? (
         <div className="text-center py-10 text-[var(--color-text-muted)]">Şu anda aktif oda yok.</div>
       ) : (
         <div className="grid gap-3">

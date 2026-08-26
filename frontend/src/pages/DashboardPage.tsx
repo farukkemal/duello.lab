@@ -72,8 +72,11 @@ export default function DashboardPage() {
 
   useEffect(() => {
     getSoloExams()
-      .then(({ data }) => setExams(data))
-      .catch(console.error)
+      .then(({ data }) => setExams(Array.isArray(data) ? data : []))
+      .catch((err) => {
+        console.error('Failed to load solo exams:', err);
+        setExams([]);
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -82,7 +85,7 @@ export default function DashboardPage() {
       setAiLoading(true);
       getWeaknessReport()
         .then(({ data }) => setAiReport(data))
-        .catch(console.error)
+        .catch((err) => console.error('Failed to load weakness report:', err))
         .finally(() => setAiLoading(false));
     }
   }, [activeTab, aiReport, aiLoading]);
@@ -154,9 +157,10 @@ export default function DashboardPage() {
   };
 
   const categories = ['TÜMÜ', 'TYT', 'AYT'];
+  const safeExams = Array.isArray(exams) ? exams : [];
   const filteredExams = selectedCategory === 'TÜMÜ'
-    ? exams
-    : exams.filter(e => e.category.toUpperCase() === selectedCategory.toUpperCase());
+    ? safeExams
+    : safeExams.filter(e => e?.category?.toUpperCase() === selectedCategory.toUpperCase());
 
   // ==========================================
   // DESKTOP (PC) FULL-WIDTH VIEWPORT RENDER
@@ -1220,7 +1224,7 @@ export default function DashboardPage() {
                         </div>
 
                         <div className="space-y-1.5">
-                          {aiReport.aiAdviceList.map((advice, idx) => (
+                          {(aiReport.aiAdviceList || []).map((advice, idx) => (
                             <div key={idx} className="text-[11px] text-slate-200 font-medium leading-snug flex items-start gap-1.5">
                               <span className="text-violet-400 text-xs shrink-0">•</span>
                               <span>{advice}</span>
@@ -1244,7 +1248,7 @@ export default function DashboardPage() {
                         </div>
 
                         <div className="space-y-2">
-                          {aiReport.branchHeatmap.map((branch) => {
+                          {(aiReport.branchHeatmap || []).map((branch) => {
                             const isMastered = branch.masteryLevel === 'Mastered';
                             const isNeedsWork = branch.masteryLevel === 'NeedsWork';
 

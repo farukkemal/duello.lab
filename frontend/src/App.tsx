@@ -12,6 +12,7 @@ import ShopPage from './pages/ShopPage';
 import ClanPage from './pages/ClanPage';
 import AdminPage from './pages/AdminPage';
 import GlobalDuelInviteModal from './components/GlobalDuelInviteModal';
+import ErrorBoundary from './components/ErrorBoundary';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { token, user, isLoading } = useAuth();
@@ -62,16 +63,18 @@ function AppRoutes() {
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <AuthProvider>
-        <SignalRProvider>
-          <ViewModeProvider>
-            <AppRoutes />
-            <GlobalDuelInviteModal />
-          </ViewModeProvider>
-        </SignalRProvider>
-      </AuthProvider>
-    </BrowserRouter>
+    <ErrorBoundary>
+      <BrowserRouter>
+        <AuthProvider>
+          <SignalRProvider>
+            <ViewModeProvider>
+              <AppRoutes />
+              <GlobalDuelInviteModal />
+            </ViewModeProvider>
+          </SignalRProvider>
+        </AuthProvider>
+      </BrowserRouter>
+    </ErrorBoundary>
   );
 }
 

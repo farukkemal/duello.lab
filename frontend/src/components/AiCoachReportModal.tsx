@@ -74,7 +74,7 @@ export default function AiCoachReportModal({ isOpen, onClose }: AiCoachReportMod
               </div>
 
               <div className="space-y-1.5">
-                {report.aiAdviceList.map((adv, idx) => (
+                {(Array.isArray(report?.aiAdviceList) ? report.aiAdviceList : []).map((adv, idx) => (
                   <div key={idx} className="text-[11px] text-slate-200 font-semibold leading-relaxed">
                     {adv}
                   </div>
@@ -94,7 +94,7 @@ export default function AiCoachReportModal({ isOpen, onClose }: AiCoachReportMod
                 <span className="text-[9px] text-slate-400">Başarı Yüzdesi</span>
               </div>
 
-              {report.branchHeatmap.map((b) => (
+              {(Array.isArray(report?.branchHeatmap) ? report.branchHeatmap : []).map((b) => (
                 <div
                   key={b.branch}
                   className="bg-[#1b2046] border border-white/10 rounded-2xl p-3 space-y-1.5"

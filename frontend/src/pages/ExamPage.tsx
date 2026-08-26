@@ -365,8 +365,8 @@ export default function ExamPage() {
 
             {/* Chunky Choices */}
             <div className="space-y-2.5 pt-3">
-              {Object.entries(question.choices)
-                .filter(([key]) => !eliminatedChoicesMap[question.id]?.includes(key))
+              {Object.entries(question?.choices || {})
+                .filter(([key]) => !eliminatedChoicesMap[question?.id || '']?.includes(key))
                 .map(([key, value]) => {
                   const isDoubleActive = doubleChanceActiveMap[question.id];
                   const isSelected = isDoubleActive

@@ -41,7 +41,7 @@ export default function DesktopArenaView({
 
   useEffect(() => {
     getWeaknessReport().then(({ data }) => setAiReport(data)).catch(() => {});
-    getTopClans(5).then(({ data }) => setTopClans(data)).catch(() => {});
+    getTopClans(5).then(({ data }) => setTopClans(Array.isArray(data) ? data : [])).catch(() => setTopClans([]));
   }, []);
 
   if (!user) return null;
@@ -133,7 +133,7 @@ export default function DesktopArenaView({
                 </div>
 
                 <div className="text-[10px] text-slate-300 leading-relaxed bg-black/30 p-2 rounded-xl border border-white/5">
-                  💡 {aiReport.aiAdviceList[0] || 'Bugün 1v1 düellolarda geometri hızını artır.'}
+                  💡 {aiReport?.aiAdviceList?.[0] || 'Bugün 1v1 düellolarda geometri hızını artır.'}
                 </div>
               </div>
             ) : (
@@ -388,7 +388,7 @@ export default function DesktopArenaView({
             </div>
 
             <div className="space-y-2">
-              {topClans.length === 0 ? (
+              {!Array.isArray(topClans) || topClans.length === 0 ? (
                 <div className="text-[11px] text-slate-400 py-3 text-center font-bold">
                   Loncalar yükleniyor...
                 </div>
@@ -425,13 +425,13 @@ export default function DesktopArenaView({
             <div className="flex items-center justify-between border-b border-white/10 pb-2">
               <h4 className="text-xs font-black text-white flex items-center gap-1.5">
                 <span>📡</span>
-                <span>Açık Lobiler ({activeRooms.length})</span>
+                <span>Açık Lobiler ({Array.isArray(activeRooms) ? activeRooms.length : 0})</span>
               </h4>
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
             </div>
 
             <div className="space-y-2 max-h-64 overflow-y-auto no-scrollbar">
-              {activeRooms.length === 0 ? (
+              {!Array.isArray(activeRooms) || activeRooms.length === 0 ? (
                 <div className="text-[11px] text-slate-400 py-4 text-center font-bold">
                   Şu an açık özel lobi yok. İlk lobiyi sen kur!
                 </div>

@@ -25,8 +25,18 @@ export default function FriendsDrawer({ isOpen, onClose }: FriendsDrawerProps) {
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
 
   const loadData = () => {
-    getFriendsList().then(({ data }) => setFriends(data)).catch(console.error);
-    getPendingFriendRequests().then(({ data }) => setPending(data)).catch(console.error);
+    getFriendsList()
+      .then(({ data }) => setFriends(Array.isArray(data) ? data : []))
+      .catch((err) => {
+        console.error('Failed to load friends:', err);
+        setFriends([]);
+      });
+    getPendingFriendRequests()
+      .then(({ data }) => setPending(Array.isArray(data) ? data : []))
+      .catch((err) => {
+        console.error('Failed to load pending requests:', err);
+        setPending([]);
+      });
   };
 
   useEffect(() => {
@@ -138,7 +148,7 @@ export default function FriendsDrawer({ isOpen, onClose }: FriendsDrawerProps) {
           {/* TAB 1: FRIENDS LIST */}
           {activeTab === 'friends' && (
             <div className="space-y-2">
-              {friends.length === 0 ? (
+              {!Array.isArray(friends) || friends.length === 0 ? (
                 <div className="text-center py-8 text-slate-400 text-xs">
                   Henüz arkadaş eklemedin. "+ Arkadaş Ekle" sekmesinden yeni arkadaşlar ekleyebilirsin!
                 </div>
@@ -197,7 +207,7 @@ export default function FriendsDrawer({ isOpen, onClose }: FriendsDrawerProps) {
           {/* TAB 2: PENDING REQUESTS */}
           {activeTab === 'pending' && (
             <div className="space-y-2">
-              {pending.length === 0 ? (
+              {!Array.isArray(pending) || pending.length === 0 ? (
                 <div className="text-center py-8 text-slate-400 text-xs">
                   Bekleyen arkadaşlık isteği yok.
                 </div>

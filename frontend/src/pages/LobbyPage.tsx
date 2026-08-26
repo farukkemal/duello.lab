@@ -728,7 +728,7 @@ export default function LobbyPage() {
 
             <div className="space-y-2">
               <div className="text-xs font-black text-slate-300 px-1">Tüm Oyuncular</div>
-              {leaderboard.map((p, idx) => (
+              {(Array.isArray(leaderboard) ? leaderboard : []).map((p, idx) => (
                 <div
                   key={p.userId}
                   className={`p-3 rounded-2xl border flex items-center justify-between ${
@@ -816,7 +816,7 @@ export default function LobbyPage() {
 
               {/* Progress Tracks */}
               <div className="space-y-1.5 pt-1 max-h-32 overflow-y-auto no-scrollbar">
-                {room.users.map((p) => {
+                {(Array.isArray(room?.users) ? room.users : []).map((p) => {
                   const isMe = p.userId === user?.id;
                   const prog = playerProgressMap[p.userId] || {
                     currentQuestionIndex: p.currentQuestionIndex || 0,
@@ -934,8 +934,8 @@ export default function LobbyPage() {
 
                 {/* Choices */}
                 <div className="space-y-2.5 pt-2">
-                  {Object.entries(currentQuestion.choices)
-                    .filter(([key]) => !eliminatedChoicesMap[currentQuestion.id]?.includes(key))
+                  {Object.entries(currentQuestion?.choices || {})
+                    .filter(([key]) => !eliminatedChoicesMap[currentQuestion?.id || '']?.includes(key))
                     .map(([key, text]) => {
                       const isDoubleActive = doubleChanceActiveMap[currentQuestion.id];
                       const isSelected = isDoubleActive
@@ -1044,11 +1044,11 @@ export default function LobbyPage() {
             {/* Players List */}
             <div className="space-y-2">
               <div className="flex items-center justify-between text-xs font-black px-1">
-                <span className="text-white">Oyuncular ({room.users.length}/{room.maxPlayers})</span>
+                <span className="text-white">Oyuncular ({Array.isArray(room?.users) ? room.users.length : 0}/{room.maxPlayers})</span>
                 <span className="text-slate-400 text-[10px]">⚡ Anlık Senkron</span>
               </div>
 
-              {room.users.map((participant) => {
+              {(Array.isArray(room?.users) ? room.users : []).map((participant) => {
                 const isUserHost = participant.userId === room.hostUserId || participant.isHost;
                 const isMe = participant.userId === user?.id;
 
