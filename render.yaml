@@ -1,4 +1,4 @@
-﻿# ==============================================================================
+# ==============================================================================
 # duello.lab — Render Blueprint (Infrastructure as Code)
 # ==============================================================================
 # Deploy both Backend (.NET 10 / Docker) and Frontend (React Vite / Static Site)
@@ -20,6 +20,10 @@ services:
     envVars:
       - key: ASPNETCORE_ENVIRONMENT
         value: Production
+      - key: DOTNET_USE_POLLING_FILE_WATCHER
+        value: "true"
+      - key: DOTNET_HOSTBUILDER__RELOADCONFIGONCHANGE
+        value: "false"
       - key: DATABASE_URL
         sync: false
       - key: ConnectionStrings__DefaultConnection
