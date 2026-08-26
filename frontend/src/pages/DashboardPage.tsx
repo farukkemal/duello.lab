@@ -430,7 +430,7 @@ export default function DashboardPage() {
                           <span>AI Sınav Koçu Stratejik Tavsiyeleri</span>
                         </h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                          {aiReport.aiAdviceList.map((adv, i) => (
+                          {(Array.isArray(aiReport?.aiAdviceList) ? aiReport.aiAdviceList : []).map((adv, i) => (
                             <div key={i} className="bg-black/30 p-3 rounded-xl border border-white/5 text-xs text-slate-200">
                               💡 {adv}
                             </div>
@@ -445,7 +445,7 @@ export default function DashboardPage() {
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                          {aiReport.branchHeatmap.map((bp: BranchPerformance) => (
+                          {(Array.isArray(aiReport?.branchHeatmap) ? aiReport.branchHeatmap : []).map((bp: BranchPerformance) => (
                             <div key={bp.branch} className="bg-black/30 p-3.5 rounded-2xl border border-white/5 space-y-2">
                               <div className="flex justify-between items-center">
                                 <span className="text-xs font-black text-white">{bp.branch}</span>

@@ -56,7 +56,8 @@ export function SignalRProvider({ children }: { children: ReactNode }) {
     const newConnection = new signalR.HubConnectionBuilder()
       .withUrl(hubUrl, {
         accessTokenFactory: () => token,
-        transport: signalR.HttpTransportType.WebSockets | signalR.HttpTransportType.LongPolling,
+        skipNegotiation: true,
+        transport: signalR.HttpTransportType.WebSockets,
       })
       .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
       .configureLogging(signalR.LogLevel.Warning)

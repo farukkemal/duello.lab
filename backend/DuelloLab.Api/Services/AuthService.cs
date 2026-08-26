@@ -93,11 +93,14 @@ public class AuthService : IAuthService
         // Validate ID token with Google OAuth2 TokenInfo API
         using var client = new HttpClient();
         var response = await client.GetAsync($"https://oauth2.googleapis.com/tokeninfo?id_token={dto.IdToken}");
+        var json = await response.Content.ReadAsStringAsync();
         
         if (!response.IsSuccessStatusCode)
-            throw new InvalidOperationException("Google kimlik doğrulaması başarısız oldu veya oturum süresi doldu.");
+        {
+            Console.WriteLine($"[GoogleAuth Error] Google tokeninfo API failed. StatusCode: {response.StatusCode}, Body: {json}");
+            throw new InvalidOperationException($"Google kimlik doğrulaması başarısız oldu (Google API: {response.StatusCode}).");
+        }
 
-        var json = await response.Content.ReadAsStringAsync();
         using var doc = System.Text.Json.JsonDocument.Parse(json);
         var root = doc.RootElement;
 

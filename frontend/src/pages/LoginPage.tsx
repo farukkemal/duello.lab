@@ -19,8 +19,11 @@ export default function LoginPage() {
     setGoogleLoading(true);
     try {
       const { data } = await googleAuth(idToken);
-      if (data?.token && data?.user) {
-        setAuth(data.token, data.user);
+      const receivedToken = data?.token || (data as any)?.Token;
+      const receivedUser = data?.user || (data as any)?.User;
+
+      if (receivedToken && receivedUser) {
+        setAuth(receivedToken, receivedUser);
         navigate('/dashboard');
       } else {
         setError('Google oturum bilgileri doğrulanamadı.');

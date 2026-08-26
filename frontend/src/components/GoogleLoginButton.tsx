@@ -41,7 +41,7 @@ export default function GoogleLoginButton({
     window.__gsiErrorHandler = onError;
   });
 
-  const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || DEFAULT_GOOGLE_CLIENT_ID;
+  const clientId = (import.meta.env.VITE_GOOGLE_CLIENT_ID || DEFAULT_GOOGLE_CLIENT_ID).trim();
 
   useEffect(() => {
     if (window.google?.accounts?.id) {
@@ -72,7 +72,6 @@ export default function GoogleLoginButton({
     if (!sdkReady || !buttonRef.current || !window.google?.accounts?.id) return;
 
     try {
-      // Prevent multiple initialize calls warning [GSI_LOGGER]
       if (window.__gsiInitializedId !== clientId) {
         window.google.accounts.id.initialize({
           client_id: clientId,
@@ -85,7 +84,8 @@ export default function GoogleLoginButton({
           },
           auto_select: false,
           cancel_on_tap_outside: true,
-          ux_mode: 'popup',
+          itp_support: true,
+          use_fedcm_for_prompt: true,
         });
         window.__gsiInitializedId = clientId;
       }
