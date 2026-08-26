@@ -14,12 +14,30 @@ const AuthContext = createContext<AuthContextType | null>(null);
 
 const parseStoredUser = (): UserDto | null => {
   try {
+    const token = localStorage.getItem('token');
     const saved = localStorage.getItem('user');
-    if (!saved) return null;
+
+    if (!token || token === 'undefined' || token === 'null' || token.trim() === '') {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      return null;
+    }
+
+    if (!saved || saved === 'undefined' || saved === 'null') {
+      localStorage.removeItem('user');
+      return null;
+    }
+
     const parsed = JSON.parse(saved);
-    if (!parsed || typeof parsed !== 'object') return null;
+    const userId = parsed?.id || parsed?.Id;
+    if (!parsed || typeof parsed !== 'object' || !userId) {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      return null;
+    }
+
     return {
-      id: parsed.id || parsed.Id || '',
+      id: userId,
       username: parsed.username || parsed.Username || 'Savaşçı',
       email: parsed.email || parsed.Email || '',
       level: parsed.level || parsed.Level || 1,
@@ -33,16 +51,25 @@ const parseStoredUser = (): UserDto | null => {
       jokerExtraTime: parsed.jokerExtraTime ?? parsed.JokerExtraTime ?? 1
     };
   } catch {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
     return null;
   }
 };
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserDto | null>(parseStoredUser);
-  const [token, setToken] = useState<string | null>(() => localStorage.getItem('token'));
+  const [token, setToken] = useState<string | null>(() => {
+    const t = localStorage.getItem('token');
+    return t && t !== 'undefined' && t !== 'null' && t.trim() !== '' ? t : null;
+  });
   const [isLoading, setIsLoading] = useState(false);
 
   const setAuth = (newToken: string, newUser: UserDto) => {
+    if (!newToken || !newUser || !newUser.id) {
+      console.error('Invalid setAuth call. Missing token or user ID:', { newToken, newUser });
+      return;
+    }
     localStorage.setItem('token', newToken);
     localStorage.setItem('user', JSON.stringify(newUser));
     setToken(newToken);
@@ -60,10 +87,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       setIsLoading(true);
       const { data } = await getMe();
+      if (!data || !data.id) {
+        logout();
+        return;
+      }
       setUser(data);
       localStorage.setItem('user', JSON.stringify(data));
     } catch (err: any) {
-      if (err?.response?.status === 401) {
+      if (err?.response?.status === 401 || err?.response?.status === 403) {
         logout();
       }
     } finally {

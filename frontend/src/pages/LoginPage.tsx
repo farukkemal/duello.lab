@@ -47,13 +47,24 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const { data } = await login(username, password);
-      setAuth(data.token, data.user);
+      const receivedToken = data?.token || (data as any)?.Token;
+      const receivedUser = data?.user || (data as any)?.User;
+
+      if (!receivedToken || !receivedUser || typeof data !== 'object') {
+        throw new Error('Geçersiz sunucu yanıtı. Backend API adresi (VITE_API_URL) tanımlanmamış veya sunucuya ulaşılamıyor.');
+      }
+
+      setAuth(receivedToken, receivedUser);
       navigate('/dashboard');
     } catch (err: any) {
+      console.error('Login submit error:', err);
       if (err.response?.status === 503 || err.response?.status === 502) {
-        setError('⏳ Sunucu başlatılıyor / uyanıyor. Lütfen 15-20 saniye bekleyip tekrar deneyin.');
+        setError('⏳ Render sunucusu başlatılıyor / uyanıyor. Lütfen 20-30 saniye bekleyip tekrar deneyin.');
+      } else if (err.code === 'ERR_NETWORK' || err.message?.includes('Network Error')) {
+        setError('🌐 Sunucuya bağlanılamadı. Render Backend servisinizin çalıştığından ve VITE_API_URL adresinin doğru olduğundan emin olun.');
       } else {
-        setError(err.response?.data?.error || 'Giriş yapılamadı. Bilgilerinizi kontrol edin.');
+        const serverError = err.response?.data?.error || err.response?.data?.message || err.message;
+        setError(serverError || 'Giriş yapılamadı. Kullanıcı adı veya şifrenizi kontrol edin.');
       }
     } finally {
       setLoading(false);

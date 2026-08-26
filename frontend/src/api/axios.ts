@@ -32,9 +32,17 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Response interceptor to handle 401
+// Response interceptor to handle HTML fallbacks and 401
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // If an HTML document was returned instead of JSON (e.g. static site SPA fallback when VITE_API_URL is missing)
+    if (typeof response.data === 'string' && response.data.trim().startsWith('<!')) {
+      const error: any = new Error('Backend API servisine ulaşılamadı. Render Frontend ayarlarında VITE_API_URL tanımlanmalıdır.');
+      error.isHtmlFallback = true;
+      return Promise.reject(error);
+    }
+    return response;
+  },
   (error) => {
     const url = error.config?.url || '';
     const isPublicAuthEndpoint = url.includes('/auth/login') || 
