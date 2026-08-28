@@ -12,6 +12,8 @@ import { getTopClans, type ClanListItem } from '../../api/social';
 import { type GameMode, GameModeEnum } from '../../api/rooms';
 import type { OnlineStats } from '../../contexts/SignalRContext';
 
+import { getAvatarIcon, getAvatarBg } from '../../utils/avatars';
+
 interface DesktopArenaViewProps {
   onStartMatchmaking: (mode: GameMode) => void;
   onStartBotPractice: () => void;
@@ -63,19 +65,31 @@ export default function DesktopArenaView({
           {/* User Profile Card */}
           <div className="game-card-3d p-4 space-y-3">
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-violet-600 via-indigo-600 to-cyan-400 p-[2px] shadow-lg">
-                <div className="w-full h-full bg-[#0d0f22] rounded-[14px] flex items-center justify-center font-black text-white text-lg">
-                  {user?.username ? user.username.charAt(0).toUpperCase() : 'U'}
+              <div
+                onClick={() => navigate('/dashboard?tab=profil', { state: { tab: 'profil' } })}
+                className="relative cursor-pointer group shrink-0"
+                title="Avatarı Değiştir"
+              >
+                <div className={`w-13 h-13 rounded-2xl bg-gradient-to-tr ${getAvatarBg(user?.avatar)} p-[2px] shadow-lg group-hover:scale-105 transition-transform`}>
+                  <div className="w-full h-full bg-[#0d0f22] rounded-[14px] flex items-center justify-center text-2xl select-none">
+                    {getAvatarIcon(user?.avatar, user?.username)}
+                  </div>
+                </div>
+                <div className="absolute -top-1 -right-1 bg-violet-600 text-white rounded-full w-4 h-4 text-[9px] flex items-center justify-center border border-white shadow">
+                  ✏️
                 </div>
               </div>
+
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 flex-wrap">
                   <h3 className="text-sm font-black text-white truncate">{user?.username || 'Savaşçı'}</h3>
                   <span className="text-[9px] bg-violet-600/40 text-violet-300 border border-violet-500/30 px-1.5 py-0.2 rounded font-black">
                     Lv.{user?.level ?? 1}
                   </span>
                 </div>
-                <p className="text-[10px] text-slate-400 font-mono truncate">{user?.email || ''}</p>
+                <div className="text-[9px] text-violet-300 font-bold uppercase tracking-wider mt-0.5 truncate">
+                  {user?.title || 'Savaşçı'}
+                </div>
               </div>
             </div>
 
@@ -97,7 +111,7 @@ export default function DesktopArenaView({
             <div className="grid grid-cols-2 gap-2 text-center">
               <div className="bg-black/30 p-2 rounded-xl border border-white/5">
                 <div className="text-[9px] text-slate-400 font-bold">🏆 Kupa</div>
-                <div className="text-sm font-mono font-black text-amber-300">1,240</div>
+                <div className="text-sm font-mono font-black text-amber-300">{Math.floor((user?.xp ?? 0) / 10)}</div>
               </div>
               <div className="bg-black/30 p-2 rounded-xl border border-white/5">
                 <div className="text-[9px] text-slate-400 font-bold">💰 Bakiye</div>
@@ -107,9 +121,9 @@ export default function DesktopArenaView({
 
             <button
               onClick={() => navigate('/dashboard?tab=profil', { state: { tab: 'profil' } })}
-              className="w-full py-2 rounded-xl bg-violet-500/15 border border-violet-500/30 text-violet-300 hover:bg-violet-500/25 font-bold text-xs transition cursor-pointer"
+              className="w-full py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-black text-xs transition cursor-pointer shadow flex items-center justify-center gap-1.5"
             >
-              📊 Detaylı Analizleri İncele ➔
+              <span>🎨</span> <span>Avatar ve Profili Özelleştir ➔</span>
             </button>
           </div>
 

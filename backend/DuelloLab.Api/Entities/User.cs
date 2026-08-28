@@ -12,6 +12,9 @@ public class User
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public string Role { get; set; } = "User"; // "User" | "Admin"
     public bool IsBanned { get; set; } = false;
+    public string Avatar { get; set; } = "default";
+    public string Title { get; set; } = "Savaşçı";
+    public string Bio { get; set; } = string.Empty;
 
     // Jokers Inventory
     public int JokerEliminateThree { get; set; } = 1;

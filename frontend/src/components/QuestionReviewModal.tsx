@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import { getExamReview, getExamReviewWithAnswers, type ExamReview } from '../api/analytics';
+import { getRoomReview } from '../api/rooms';
 
 interface QuestionReviewModalProps {
   isOpen: boolean;
   onClose: () => void;
+  roomCode?: string;
   examId?: string;
   answers?: Record<string, string | null>;
   fallbackQuestions?: Array<{
@@ -11,6 +13,8 @@ interface QuestionReviewModalProps {
     branch: string;
     questionText: string;
     choices: Record<string, string>;
+    correctAnswer?: string;
+    solutionText?: string;
     imageUrl?: string;
   }>;
 }
@@ -18,6 +22,7 @@ interface QuestionReviewModalProps {
 export default function QuestionReviewModal({
   isOpen,
   onClose,
+  roomCode,
   examId,
   answers,
   fallbackQuestions
@@ -30,7 +35,21 @@ export default function QuestionReviewModal({
     if (!isOpen) return;
 
     setLoading(true);
-    if (examId) {
+
+    if (roomCode) {
+      getRoomReview(roomCode)
+        .then(({ data }) => {
+          if (data && Array.isArray(data.questions) && data.questions.length > 0) {
+            setReview(data);
+          } else {
+            constructFallback();
+          }
+        })
+        .catch(() => {
+          constructFallback();
+        })
+        .finally(() => setLoading(false));
+    } else if (examId) {
       const fetcher = answers
         ? getExamReviewWithAnswers(examId, answers)
         : getExamReview(examId);
@@ -38,7 +57,6 @@ export default function QuestionReviewModal({
       fetcher
         .then(({ data }) => setReview(data))
         .catch(() => {
-          // Fallback construction if API error
           constructFallback();
         })
         .finally(() => setLoading(false));
@@ -46,36 +64,52 @@ export default function QuestionReviewModal({
       constructFallback();
       setLoading(false);
     }
-  }, [isOpen, examId, answers]);
+  }, [isOpen, roomCode, examId, answers]);
 
   const constructFallback = () => {
-    if (!fallbackQuestions) return;
+    if (!fallbackQuestions || fallbackQuestions.length === 0) {
+      setReview(null);
+      return;
+    }
+
     const reviewList = fallbackQuestions.map((q) => {
-      const selected = answers ? answers[q.id] : null;
+      const qIdStr = String(q.id);
+      const selected = answers ? (answers[qIdStr] || answers[q.id] || null) : null;
+      const correctTarget = ((q as any).correctAnswer || (q as any).CorrectAnswer || 'A').trim().toUpperCase();
+
+      let isCorrect = false;
+      if (selected) {
+        if (selected.includes(',')) {
+          isCorrect = selected.split(',').some((s: string) => s.trim().toUpperCase() === correctTarget);
+        } else {
+          isCorrect = selected.trim().toUpperCase() === correctTarget;
+        }
+      }
+
       return {
         questionId: q.id,
-        branch: q.branch,
-        questionText: q.questionText,
-        choices: q.choices,
-        correctAnswer: 'A', // Fallback
-        selectedAnswer: selected || null,
-        isCorrect: selected === 'A',
-        solutionText: 'Doğru cevap öncüller ve temel konu kazanımları incelendiğinde netleşmektedir.',
+        branch: q.branch || 'Genel',
+        questionText: q.questionText || '',
+        choices: q.choices || {},
+        correctAnswer: correctTarget,
+        selectedAnswer: selected,
+        isCorrect: isCorrect,
+        solutionText: (q as any).solutionText || (q as any).SolutionText || `Doğru cevap ${correctTarget} şıkkıdır. Konu kazanımındaki temel kurallar uygulandığında çözüme ulaşılmaktadır.`,
         imageUrl: q.imageUrl || null,
-        aiExplanationTip: selected === 'A'
+        aiExplanationTip: isCorrect
           ? '🎯 Tebrikler! Doğru yaklaşım sergiledin.'
-          : '⚠️ Bu soruda doğru mantığı kavramak için çözüm basamaklarına dikkat et.'
+          : `⚠️ Bu soruda doğru şık (${correctTarget}). Çözüm basamaklarındaki mantık kurgusuna dikkat et.`
       };
     });
 
     setReview({
-      examId: examId || 'solo-match',
+      examId: examId || roomCode || 'match-review',
       examTitle: 'Sınav Analizi & Çözümleri',
       category: 'TYT',
       correctCount: reviewList.filter(q => q.isCorrect).length,
       wrongCount: reviewList.filter(q => !q.isCorrect && q.selectedAnswer).length,
       blankCount: reviewList.filter(q => !q.selectedAnswer).length,
-      netScore: 0,
+      netScore: reviewList.filter(q => q.isCorrect).length - (reviewList.filter(q => !q.isCorrect && q.selectedAnswer).length / 2.0),
       questions: reviewList
     });
   };

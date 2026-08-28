@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useSignalR } from '../contexts/SignalRContext';
+import UserProfileModal from './UserProfileModal';
+import { getAvatarIcon } from '../utils/avatars';
 import {
   getFriendsList,
   getPendingFriendRequests,
@@ -23,6 +25,8 @@ export default function FriendsDrawer({ isOpen, onClose }: FriendsDrawerProps) {
   const [addUsername, setAddUsername] = useState('');
   const [loading, setLoading] = useState(false);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
+  const [selectedUserToInspect, setSelectedUserToInspect] = useState<string | null>(null);
+  const [showProfileModal, setShowProfileModal] = useState(false);
 
   const loadData = () => {
     getFriendsList()
@@ -156,13 +160,20 @@ export default function FriendsDrawer({ isOpen, onClose }: FriendsDrawerProps) {
                 friends.map((f) => (
                   <div
                     key={f.friendshipId}
-                    className="bg-[#1b2046] border border-white/10 rounded-2xl p-3 flex items-center justify-between"
+                    className="bg-[#1b2046] border border-white/10 hover:border-violet-500/50 rounded-2xl p-3 flex items-center justify-between transition group"
                   >
-                    <div className="flex items-center gap-3">
-                      <div className="relative">
-                        <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-violet-600 to-cyan-400 p-[1.5px]">
-                          <div className="w-full h-full bg-[#0d0f22] rounded-[10px] flex items-center justify-center font-black text-white text-xs">
-                            {f?.username ? f.username.charAt(0).toUpperCase() : 'U'}
+                    <div
+                      onClick={() => {
+                        setSelectedUserToInspect(f.username || f.userId);
+                        setShowProfileModal(true);
+                      }}
+                      className="flex items-center gap-3 cursor-pointer flex-1 min-w-0"
+                      title="Profili ve Isı Haritasını İncele"
+                    >
+                      <div className="relative shrink-0">
+                        <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-violet-600 to-cyan-400 p-[1.5px] group-hover:scale-105 transition-transform">
+                          <div className="w-full h-full bg-[#0d0f22] rounded-[10px] flex items-center justify-center text-lg select-none">
+                            {getAvatarIcon((f as any).avatar, f.username)}
                           </div>
                         </div>
                         <span className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-[#131631] ${
@@ -170,8 +181,8 @@ export default function FriendsDrawer({ isOpen, onClose }: FriendsDrawerProps) {
                         }`} />
                       </div>
 
-                      <div>
-                        <div className="text-xs font-black text-white flex items-center gap-1.5">
+                      <div className="min-w-0">
+                        <div className="text-xs font-black text-white flex items-center gap-1.5 truncate group-hover:text-cyan-300 transition-colors">
                           <span>{f?.username || 'Arkadaş'}</span>
                           <span className="text-[9px] text-amber-300 font-mono">Lv.{f.level}</span>
                         </div>
@@ -181,7 +192,7 @@ export default function FriendsDrawer({ isOpen, onClose }: FriendsDrawerProps) {
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 shrink-0">
                       {f.isOnline && (
                         <button
                           onClick={() => handleInviteToDuel(f.userId)}
@@ -217,7 +228,14 @@ export default function FriendsDrawer({ isOpen, onClose }: FriendsDrawerProps) {
                     key={p.friendshipId}
                     className="bg-[#1b2046] border border-white/10 rounded-2xl p-3 flex items-center justify-between"
                   >
-                    <div>
+                    <div
+                      onClick={() => {
+                        setSelectedUserToInspect(p.requesterUsername || p.requesterId);
+                        setShowProfileModal(true);
+                      }}
+                      className="cursor-pointer hover:text-cyan-300 transition"
+                      title="Profili İncele"
+                    >
                       <div className="text-xs font-black text-white">{p.requesterUsername}</div>
                       <div className="text-[10px] text-amber-300 font-mono">Seviye {p.requesterLevel}</div>
                     </div>
@@ -276,6 +294,14 @@ export default function FriendsDrawer({ isOpen, onClose }: FriendsDrawerProps) {
           )}
 
         </div>
+
+        {/* User Profile Modal */}
+        <UserProfileModal
+          isOpen={showProfileModal}
+          onClose={() => setShowProfileModal(false)}
+          userIdOrUsername={selectedUserToInspect}
+          onInviteDuel={(targetUid) => handleInviteToDuel(targetUid)}
+        />
 
       </div>
     </div>

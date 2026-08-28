@@ -1,4 +1,5 @@
 
+using DuelloLab.Api.DTOs.Analytics;
 using DuelloLab.Api.DTOs.Exam;
 using DuelloLab.Api.DTOs.Room;
 
@@ -15,4 +16,5 @@ public interface IRoomService
     Task<MatchEndedDto> FinishMatchAsync(string roomCode);
     Task<MatchEndedDto> ForceTimeUpAsync(string roomCode);
     Task<MatchEndedDto> GetRoomLeaderboardAsync(string roomCode);
+    Task<ExamReviewDto?> GetRoomReviewAsync(Guid userId, string roomCode);
 }

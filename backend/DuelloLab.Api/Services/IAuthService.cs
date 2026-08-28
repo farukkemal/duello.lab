@@ -9,4 +9,6 @@ public interface IAuthService
     Task<AuthResponseDto> GoogleAuthAsync(GoogleAuthDto dto);
     Task<UserDto?> GetUserByIdAsync(Guid userId);
     Task<UserDto> ClaimCoinsAsync(Guid userId, int amount = 100);
+    Task<UserDto> UpdateProfileAsync(Guid userId, UpdateProfileDto dto);
+    Task<PublicProfileDto?> GetPublicProfileAsync(string identifier);
 }

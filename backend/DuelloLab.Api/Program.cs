@@ -171,6 +171,8 @@ app.Use(async (context, next) =>
     await next();
 });
 
+app.UseWebSockets();
+
 app.UseAuthentication();
 app.UseAuthorization();
 
@@ -186,7 +188,7 @@ app.MapGet("/", () => Results.Ok(new
     time = DateTime.UtcNow 
 }));
 
-app.MapGet("/hubs/duello", () => Results.Ok(new 
+app.MapGet("/hubs/duello/health", () => Results.Ok(new 
 { 
     status = "healthy", 
     service = "DuelloLab SignalR Hub", 
@@ -313,9 +315,18 @@ using (var scope = app.Services.CreateScope())
 
             ALTER TABLE ""Users"" ADD COLUMN IF NOT EXISTS ""Role"" varchar(20) NOT NULL DEFAULT 'User';
             ALTER TABLE ""Users"" ADD COLUMN IF NOT EXISTS ""IsBanned"" boolean NOT NULL DEFAULT false;
-            ALTER TABLE ""Users"" ADD COLUMN IF NOT EXISTS ""JokerEliminateThree"" integer NOT NULL DEFAULT 1;
-            ALTER TABLE ""Users"" ADD COLUMN IF NOT EXISTS ""JokerDoubleChance"" integer NOT NULL DEFAULT 1;
-            ALTER TABLE ""Users"" ADD COLUMN IF NOT EXISTS ""JokerExtraTime"" integer NOT NULL DEFAULT 1;
+            ALTER TABLE ""Users"" ADD COLUMN IF NOT EXISTS ""Avatar"" varchar(100) NOT NULL DEFAULT 'default';
+            ALTER TABLE ""Users"" ADD COLUMN IF NOT EXISTS ""Title"" varchar(100) NOT NULL DEFAULT 'Savaşçı';
+            ALTER TABLE ""Users"" ADD COLUMN IF NOT EXISTS ""Bio"" varchar(300) NOT NULL DEFAULT '';
+            ALTER TABLE ""Users"" ADD COLUMN IF NOT EXISTS ""JokerEliminateThree"" integer NOT NULL DEFAULT 10;
+            ALTER TABLE ""Users"" ADD COLUMN IF NOT EXISTS ""JokerDoubleChance"" integer NOT NULL DEFAULT 10;
+            ALTER TABLE ""Users"" ADD COLUMN IF NOT EXISTS ""JokerExtraTime"" integer NOT NULL DEFAULT 10;
+
+            UPDATE ""Users"" SET
+                ""JokerEliminateThree"" = GREATEST(COALESCE(""JokerEliminateThree"", 0), 10),
+                ""JokerDoubleChance"" = GREATEST(COALESCE(""JokerDoubleChance"", 0), 10),
+                ""JokerExtraTime"" = GREATEST(COALESCE(""JokerExtraTime"", 0), 10),
+                ""CoinBalance"" = GREATEST(COALESCE(""CoinBalance"", 0), 500);
         ");
 
         // Seed default exam and battleground questions if empty

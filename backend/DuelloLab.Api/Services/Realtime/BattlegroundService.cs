@@ -116,6 +116,41 @@ public class BattlegroundService : IBattlegroundService
         }
         await _db.SaveChangesAsync();
 
+        // Populate realistic Battleground AI contestants if needed
+        var botNames = new[] {
+            "Alp", "Zeynep", "Demir", "Asya", "Mehmet", "Elif", "Kaan", "Defne",
+            "Mert", "Ece", "Burak", "Selin", "Onur", "İpek", "Emre", "Büşra",
+            "Doruk", "Damla", "Yusuf", "Aylin", "Umut", "Melis", "Oğuz", "Ceren",
+            "Barış", "Deniz", "Tuna", "Sude", "Arda", "Eda", "Tolga", "Bengü",
+            "Hakan", "Gizem", "Cem", "Hazal", "Volkan", "Gamze", "Yiğit", "Beril",
+            "Bora", "Pelin", "Eren", "Derin", "Serkan", "Lara", "Kerem", "Sena"
+        };
+
+        var difficulties = new[] { "berkay", "selin", "emre", "nur", "esma" };
+        var rnd = new Random();
+        if (room.Users.Count < 30)
+        {
+            int targetTotal = Math.Min(48, 30 + rnd.Next(10, 18));
+            int botsToAdd = targetTotal - room.Users.Count;
+            for (int i = 0; i < botsToAdd && i < botNames.Length; i++)
+            {
+                var botId = Guid.NewGuid().ToString();
+                var botDiff = difficulties[rnd.Next(difficulties.Length)];
+                room.Users[botId] = new RoomUserInfo
+                {
+                    UserId = botId,
+                    Username = $"[Bot] {botNames[i]}",
+                    Level = rnd.Next(2, 20),
+                    IsBot = true,
+                    BotDifficulty = botDiff,
+                    IsReady = true,
+                    CurrentQuestionIndex = 0,
+                    AnsweredCount = 0,
+                    ProgressPercentage = 0
+                };
+            }
+        }
+
         room.Status = RoomStatus.InProgress;
         room.StartTime = DateTime.UtcNow.AddSeconds(3); // 3s countdown
         room.SafeZonePlayersRemaining = room.Users.Count;
@@ -123,7 +158,7 @@ public class BattlegroundService : IBattlegroundService
 
         await _roomStateService.CreateRoomAsync(room);
 
-        _logger.LogInformation("🔥 100 Kişilik Battleground başladı: {RoomCode}, Sorular 22 gün kilitlendi.", roomCode);
+        _logger.LogInformation("🔥 {Count} Kişilik Battleground başladı: {RoomCode}, Sorular 22 gün kilitlendi.", room.Users.Count, roomCode);
 
         return new MatchStartingDto
         {
@@ -196,7 +231,20 @@ public class BattlegroundService : IBattlegroundService
         var question = await _db.Questions.FindAsync(qGuid);
         if (question == null) return false;
 
-        bool isCorrect = string.Equals(selectedAnswer, question.CorrectAnswer, StringComparison.OrdinalIgnoreCase);
+        bool isCorrect = false;
+        if (!string.IsNullOrWhiteSpace(selectedAnswer))
+        {
+            var correctTarget = (question.CorrectAnswer ?? string.Empty).Trim();
+            if (selectedAnswer.Contains(','))
+            {
+                var options = selectedAnswer.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                isCorrect = options.Any(opt => opt.Equals(correctTarget, StringComparison.OrdinalIgnoreCase));
+            }
+            else
+            {
+                isCorrect = string.Equals(selectedAnswer.Trim(), correctTarget, StringComparison.OrdinalIgnoreCase);
+            }
+        }
 
         if (!isCorrect && !string.IsNullOrEmpty(selectedAnswer))
         {

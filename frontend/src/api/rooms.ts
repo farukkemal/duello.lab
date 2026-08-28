@@ -166,3 +166,9 @@ export interface CreateBotRoomRequest {
 export const createBotRoom = (data: CreateBotRoomRequest) =>
   api.post<RoomState>('/rooms/bot-room', data);
 
+export const getRoomLeaderboard = (roomCode: string) =>
+  api.get<MatchEndedData>(`/rooms/${roomCode}/leaderboard`);
+
+export const getRoomReview = (roomCode: string) =>
+  api.get<any>(`/rooms/${roomCode}/review`);
+

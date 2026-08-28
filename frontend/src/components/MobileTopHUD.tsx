@@ -7,6 +7,8 @@ import { triggerLevelUpConfetti } from '../utils/confetti';
 import { isAudioMuted, toggleAudioMute, playCoinSound } from '../utils/audio';
 import FriendsDrawer from './FriendsDrawer';
 
+import { getAvatarIcon, getAvatarBg } from '../utils/avatars';
+
 interface MobileTopHUDProps {
   onOpenProfile?: () => void;
 }
@@ -68,9 +70,9 @@ export default function MobileTopHUD({ onOpenProfile }: MobileTopHUDProps) {
             className="flex items-center gap-1.5 bg-[#171b38] border border-white/15 px-2 py-1.5 rounded-2xl cursor-pointer active:scale-95 transition-transform"
           >
             <div className="relative">
-              <div className="w-7 h-7 rounded-xl bg-gradient-to-tr from-violet-600 to-cyan-400 p-[1.5px] shadow">
-                <div className="w-full h-full bg-[#0d0f22] rounded-[9px] flex items-center justify-center font-black text-white text-[11px] font-mono">
-                  {user?.username ? user.username.charAt(0).toUpperCase() : 'U'}
+              <div className={`w-7 h-7 rounded-xl bg-gradient-to-tr ${getAvatarBg(user?.avatar)} p-[1.5px] shadow`}>
+                <div className="w-full h-full bg-[#0d0f22] rounded-[9px] flex items-center justify-center font-black text-white text-xs select-none">
+                  {getAvatarIcon(user?.avatar, user?.username)}
                 </div>
               </div>
               <div className="absolute -bottom-1 -right-1 bg-amber-400 text-slate-950 font-black text-[8px] w-3.5 h-3.5 rounded-full flex items-center justify-center border border-slate-900 shadow">

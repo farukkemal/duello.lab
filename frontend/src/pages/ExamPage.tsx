@@ -84,39 +84,45 @@ export default function ExamPage() {
 
   const handleUseEliminateThree = async () => {
     const currentQ = exam?.questions[currentIndex];
-    if (!user || (user.jokerEliminateThree ?? 0) <= 0 || !currentQ) return;
-    if (eliminatedChoicesMap[currentQ.id]?.length > 0) {
+    if (!currentQ) return;
+    const currentQId = String(currentQ.id);
+    if ((eliminatedChoicesMap[currentQId]?.length ?? 0) > 0) {
       showToast('⚠️ Bu soruda zaten 3 şık eleme jokeri kullanıldı.');
+      return;
+    }
+
+    const currentCount = user?.jokerEliminateThree ?? 0;
+    if (currentCount <= 0) {
+      showToast('❌ Yetersiz joker! Mağazadan "3 Şık Eleme" jokeri almalısın.');
       return;
     }
 
     setJokerLoading(true);
     try {
-      const { data } = await useJoker('eliminate_three', currentQ.id);
-      await refreshUser();
-
-      const toEliminate = data.eliminatedChoices || [];
-
-      setEliminatedChoicesMap(prev => ({
-        ...prev,
-        [currentQ.id]: toEliminate
-      }));
-
-      // If current answer was eliminated, clear it
-      if (toEliminate.includes(answers[currentQ.id] || '')) {
-        setAnswers(prev => ({ ...prev, [currentQ.id]: null }));
-      }
-      if (selectedDoubleChoicesMap[currentQ.id]) {
-        setSelectedDoubleChoicesMap(prev => ({
+      const { data } = await useJoker('eliminate_three', currentQId);
+      const serverWrongs = data?.eliminatedChoices || (data as any)?.EliminatedChoices || [];
+      if (Array.isArray(serverWrongs) && serverWrongs.length > 0) {
+        const normalized = serverWrongs.map((c: string) => String(c).trim().toUpperCase());
+        setEliminatedChoicesMap(prev => ({
           ...prev,
-          [currentQ.id]: (prev[currentQ.id] || []).filter(c => !toEliminate.includes(c))
+          [currentQId]: normalized
         }));
-      }
 
-      showToast('🎯 3 Yanlış Şık Elendi! 2 şık kaldı.');
-      triggerPodiumConfetti();
-    } catch (e: any) {
-      showToast(e.response?.data?.message || e.response?.data || 'Joker kullanılamadı.');
+        // If current answer was eliminated, clear it
+        const currentAns = answers[currentQId];
+        if (currentAns && normalized.includes(currentAns.trim().toUpperCase())) {
+          setAnswers(prev => ({ ...prev, [currentQId]: null }));
+        }
+
+        showToast('🎯 3 Yanlış Şık Elendi! Sadece 2 şık kaldı.');
+        triggerPodiumConfetti();
+      } else {
+        showToast('⚠️ Şıklar elenemedi veya bu soru için yeterli şık yok.');
+      }
+      await refreshUser();
+    } catch (err: any) {
+      const msg = err.response?.data?.message || err.response?.data || 'Joker kullanılamadı.';
+      showToast(`⚠️ ${typeof msg === 'string' ? msg : 'Joker kullanılamadı.'}`);
     } finally {
       setJokerLoading(false);
     }
@@ -124,94 +130,116 @@ export default function ExamPage() {
 
   const handleUseDoubleChance = async () => {
     const currentQ = exam?.questions[currentIndex];
-    if (!user || (user.jokerDoubleChance ?? 0) <= 0 || !currentQ) return;
-    if (doubleChanceActiveMap[currentQ.id]) {
+    if (!currentQ) return;
+    const currentQId = String(currentQ.id);
+    if (doubleChanceActiveMap[currentQId]) {
       showToast('⚠️ Bu soruda zaten çift cevap jokeri aktif.');
+      return;
+    }
+
+    const currentCount = user?.jokerDoubleChance ?? 0;
+    if (currentCount <= 0) {
+      showToast('❌ Yetersiz joker! Mağazadan "Çift Cevap" jokeri almalısın.');
       return;
     }
 
     setJokerLoading(true);
     try {
-      await useJoker('double_chance');
-      await refreshUser();
-
+      await useJoker('double_chance', currentQId);
       setDoubleChanceActiveMap(prev => ({
         ...prev,
-        [currentQ.id]: true
+        [currentQId]: true
       }));
 
-      const curr = answers[currentQ.id];
+      const curr = answers[currentQId];
       if (curr) {
         setSelectedDoubleChoicesMap(prev => ({
           ...prev,
-          [currentQ.id]: [curr]
+          [currentQId]: curr.split(',').map(c => c.trim().toUpperCase()).filter(Boolean)
+        }));
+      } else {
+        setSelectedDoubleChoicesMap(prev => ({
+          ...prev,
+          [currentQId]: []
         }));
       }
 
       showToast('✌️ Çift Cevap Jokeri Aktif! Şimdi 2 şık seçebilirsin.');
       triggerPodiumConfetti();
-    } catch (e: any) {
-      showToast(e.response?.data?.message || e.response?.data || 'Joker kullanılamadı.');
+      await refreshUser();
+    } catch (err: any) {
+      const msg = err.response?.data?.message || err.response?.data || 'Joker kullanılamadı.';
+      showToast(`⚠️ ${typeof msg === 'string' ? msg : 'Joker kullanılamadı.'}`);
     } finally {
       setJokerLoading(false);
     }
   };
 
   const handleUseExtraTime = async () => {
-    if (!user || (user.jokerExtraTime ?? 0) <= 0) return;
+    const currentCount = user?.jokerExtraTime ?? 0;
+    if (currentCount <= 0) {
+      showToast('❌ Yetersiz joker! Mağazadan "Ekstra Süre" jokeri almalısın.');
+      return;
+    }
 
     setJokerLoading(true);
     try {
       await useJoker('extra_time');
-      await refreshUser();
-
-      setElapsed(prev => Math.max(0, prev - 15)); // Süreyi 15 saniye geriye sararak avantaj sağlar
+      setElapsed(prev => Math.max(0, prev - 15));
       showToast('⏳ Sürene +15 Saniye Avantaj Eklendi!');
       triggerPodiumConfetti();
-    } catch (e: any) {
-      showToast(e.response?.data?.message || e.response?.data || 'Joker kullanılamadı.');
+      await refreshUser();
+    } catch (err: any) {
+      const msg = err.response?.data?.message || err.response?.data || 'Joker kullanılamadı.';
+      showToast(`⚠️ ${typeof msg === 'string' ? msg : 'Joker kullanılamadı.'}`);
     } finally {
       setJokerLoading(false);
     }
   };
 
   const handleAnswer = (questionId: string, choice: string) => {
+    const qIdStr = String(questionId);
+    const normalizedChoice = choice.trim().toUpperCase();
+
     // Block if choice was eliminated
-    if (eliminatedChoicesMap[questionId]?.includes(choice)) {
+    const eliminated = (eliminatedChoicesMap[qIdStr] || []).map(k => k.trim().toUpperCase());
+    if (eliminated.includes(normalizedChoice)) {
       showToast('🚫 Bu şık elenmiştir, seçilemez.');
       return;
     }
 
-    const isDoubleChance = doubleChanceActiveMap[questionId];
+    const isDoubleChance = Boolean(doubleChanceActiveMap[qIdStr]);
 
     if (isDoubleChance) {
-      const currentSelected = selectedDoubleChoicesMap[questionId] || [];
+      const currentSelected = (selectedDoubleChoicesMap[qIdStr] || []).map(k => k.trim().toUpperCase());
       let newSelected: string[];
 
-      if (currentSelected.includes(choice)) {
-        newSelected = currentSelected.filter(k => k !== choice);
+      if (currentSelected.includes(normalizedChoice)) {
+        newSelected = currentSelected.filter(k => k !== normalizedChoice);
       } else if (currentSelected.length < 2) {
-        newSelected = [...currentSelected, choice];
+        newSelected = [...currentSelected, normalizedChoice];
       } else {
-        newSelected = [currentSelected[1], choice];
+        newSelected = [currentSelected[1], normalizedChoice];
       }
 
       setSelectedDoubleChoicesMap(prev => ({
         ...prev,
-        [questionId]: newSelected
+        [qIdStr]: newSelected
       }));
 
       const answerValue = newSelected.length > 0 ? newSelected.join(',') : null;
       setAnswers(prev => ({
         ...prev,
-        [questionId]: answerValue
+        [qIdStr]: answerValue
       }));
       return;
     }
 
+    const currentSingle = answers[qIdStr]?.trim().toUpperCase();
+    const newChoice = currentSingle === normalizedChoice ? null : normalizedChoice;
     setAnswers(prev => ({
       ...prev,
-      [questionId]: prev[questionId] === choice ? null : choice
+      [qIdStr]: newChoice
     }));
   };
 
@@ -300,15 +328,19 @@ export default function ExamPage() {
                 onClick={handleUseEliminateThree}
                 disabled={jokerLoading || (user?.jokerEliminateThree ?? 0) <= 0 || (question && (eliminatedChoicesMap[question.id]?.length ?? 0) > 0)}
                 title="3 Yanlış Şıkkı Ele"
-                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[10px] font-black transition-all cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed ${
+                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[10px] font-black transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
                   question && (eliminatedChoicesMap[question.id]?.length ?? 0) > 0
                     ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-                    : 'bg-[#1c2148] hover:bg-[#252b5e] text-white border border-white/10 active:scale-95'
+                    : (user?.jokerEliminateThree ?? 0) > 0
+                    ? 'bg-[#1c2148] hover:bg-[#252b5e] text-white border border-amber-400/30 active:scale-95 shadow'
+                    : 'bg-[#1c2148]/50 text-slate-400 border border-white/5'
                 }`}
               >
                 <span className="text-xs">🎯</span>
                 <span>3 Ele</span>
-                <span className="bg-amber-400 text-slate-950 px-1 py-0.2 rounded font-black text-[9px]">
+                <span className={`px-1.5 py-0.2 rounded-md font-black text-[9px] ${
+                  (user?.jokerEliminateThree ?? 0) > 0 ? 'bg-amber-400 text-slate-950 font-bold' : 'bg-slate-700 text-slate-400'
+                }`}>
                   {user?.jokerEliminateThree ?? 0}
                 </span>
               </button>
@@ -318,15 +350,19 @@ export default function ExamPage() {
                 onClick={handleUseDoubleChance}
                 disabled={jokerLoading || (user?.jokerDoubleChance ?? 0) <= 0 || (question && doubleChanceActiveMap[question.id])}
                 title="2 Şık İşaretleme Hakkı"
-                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[10px] font-black transition-all cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed ${
+                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[10px] font-black transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
                   question && doubleChanceActiveMap[question.id]
                     ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 animate-pulse'
-                    : 'bg-[#1c2148] hover:bg-[#252b5e] text-white border border-white/10 active:scale-95'
+                    : (user?.jokerDoubleChance ?? 0) > 0
+                    ? 'bg-[#1c2148] hover:bg-[#252b5e] text-white border border-cyan-400/30 active:scale-95 shadow'
+                    : 'bg-[#1c2148]/50 text-slate-400 border border-white/5'
                 }`}
               >
                 <span className="text-xs">✌️</span>
                 <span>Çift Hak</span>
-                <span className="bg-cyan-400 text-slate-950 px-1 py-0.2 rounded font-black text-[9px]">
+                <span className={`px-1.5 py-0.2 rounded-md font-black text-[9px] ${
+                  (user?.jokerDoubleChance ?? 0) > 0 ? 'bg-cyan-400 text-slate-950 font-bold' : 'bg-slate-700 text-slate-400'
+                }`}>
                   {user?.jokerDoubleChance ?? 0}
                 </span>
               </button>
@@ -336,11 +372,17 @@ export default function ExamPage() {
                 onClick={handleUseExtraTime}
                 disabled={jokerLoading || (user?.jokerExtraTime ?? 0) <= 0}
                 title="Sürene +15 Saniye Avantaj Ekle"
-                className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[10px] font-black bg-[#1c2148] hover:bg-[#252b5e] text-white border border-white/10 active:scale-95 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[10px] font-black transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
+                  (user?.jokerExtraTime ?? 0) > 0
+                    ? 'bg-[#1c2148] hover:bg-[#252b5e] text-white border border-emerald-400/30 active:scale-95 shadow'
+                    : 'bg-[#1c2148]/50 text-slate-400 border border-white/5'
+                }`}
               >
                 <span className="text-xs">⏳</span>
                 <span>+15s</span>
-                <span className="bg-emerald-400 text-slate-950 px-1 py-0.2 rounded font-black text-[9px]">
+                <span className={`px-1.5 py-0.2 rounded-md font-black text-[9px] ${
+                  (user?.jokerExtraTime ?? 0) > 0 ? 'bg-emerald-400 text-slate-950 font-bold' : 'bg-slate-700 text-slate-400'
+                }`}>
                   {user?.jokerExtraTime ?? 0}
                 </span>
               </button>
@@ -363,18 +405,51 @@ export default function ExamPage() {
               )}
             </div>
 
+            {/* Active Joker Notifications */}
+            {question && (eliminatedChoicesMap[String(question.id)]?.length ?? 0) > 0 && (
+              <div className="bg-gradient-to-r from-amber-500/20 to-orange-500/20 border border-amber-400/50 p-2.5 rounded-xl flex items-center justify-between text-xs font-black text-amber-300 mb-2 shadow">
+                <div className="flex items-center gap-2">
+                  <span className="text-base">🎯</span>
+                  <span>3 Yanlış Şık Elendi! Sadece 2 şık kaldı.</span>
+                </div>
+                <span className="bg-amber-400 text-slate-950 px-2 py-0.5 rounded-md text-[10px] font-black">
+                  2 Şık
+                </span>
+              </div>
+            )}
+
+            {question && doubleChanceActiveMap[String(question.id)] && (
+              <div className="bg-gradient-to-r from-cyan-500/20 to-blue-500/20 border border-cyan-400/50 p-2.5 rounded-xl flex items-center justify-between text-xs font-black text-cyan-300 animate-pulse mb-2 shadow">
+                <div className="flex items-center gap-2">
+                  <span className="text-base">✌️</span>
+                  <span>Çift Cevap Aktif! 2 şık seçebilirsin.</span>
+                </div>
+                <span className="bg-cyan-400 text-slate-950 px-2 py-0.5 rounded-md text-[10px] font-black">
+                  {(selectedDoubleChoicesMap[String(question.id)] || []).length}/2 Seçildi
+                </span>
+              </div>
+            )}
+
             {/* Chunky Choices */}
-            <div className="space-y-2.5 pt-3">
+            <div className="space-y-2.5 pt-1">
               {Object.entries(question?.choices || {})
-                .filter(([key]) => !eliminatedChoicesMap[question?.id || '']?.includes(key))
+                .filter(([key]) => {
+                  const qIdStr = String(question?.id || '');
+                  const eliminated = (eliminatedChoicesMap[qIdStr] || []).map(k => k.trim().toUpperCase());
+                  return !eliminated.includes(key.trim().toUpperCase());
+                })
                 .map(([key, value]) => {
-                  const isDoubleActive = doubleChanceActiveMap[question.id];
+                  const qIdStr = String(question.id);
+                  const normalizedKey = key.trim().toUpperCase();
+                  const isDoubleActive = Boolean(doubleChanceActiveMap[qIdStr]);
+                  const selectedDouble = (selectedDoubleChoicesMap[qIdStr] || []).map(k => k.trim().toUpperCase());
+
                   const isSelected = isDoubleActive
-                    ? (selectedDoubleChoicesMap[question.id] || []).includes(key)
-                    : answers[question.id] === key;
+                    ? selectedDouble.includes(normalizedKey)
+                    : (answers[qIdStr]?.trim().toUpperCase() === normalizedKey);
 
                   const choiceIndex = isDoubleActive && isSelected
-                    ? (selectedDoubleChoicesMap[question.id] || []).indexOf(key) + 1
+                    ? selectedDouble.indexOf(normalizedKey) + 1
                     : 0;
 
                   return (
@@ -390,7 +465,7 @@ export default function ExamPage() {
                       <span className={`w-8 h-8 rounded-xl flex items-center justify-center mr-3 text-xs font-black font-mono shrink-0 transition-colors ${
                         isSelected ? 'bg-cyan-400 text-slate-950 shadow-md font-extrabold' : 'bg-black/30 text-slate-400'
                       }`}>
-                        {key}
+                        {key.trim().toUpperCase()}
                       </span>
                       <span className="flex-1 leading-snug text-slate-100">{value}</span>
                       {isDoubleActive && isSelected && (

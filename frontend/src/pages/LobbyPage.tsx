@@ -4,12 +4,12 @@ import { useAuth } from '../contexts/AuthContext';
 import { useSignalR } from '../contexts/SignalRContext';
 import {
   getRoom,
+  getRoomLeaderboard,
   type RoomState,
   type RoomUserInfo,
   type MatchStartingData,
   type PlayerProgressData,
   type MatchPlayerResult,
-  type MatchEndedData,
   type ZoneShrunkData,
   type PlayerEliminatedData
 } from '../api/rooms';
@@ -32,12 +32,24 @@ export const getMatchDuration = (questionCount: number) => {
   return Math.max(60, questionCount * 60); // her soruya 1 dk
 };
 
+const normalizeQuestions = (qs: any[]): SoloQuestion[] => {
+  return (qs || []).map((q, idx) => ({
+    id: String(q?.id || q?.Id || q?.questionId || q?.QuestionId || `q-${idx}`),
+    branch: q?.branch || q?.Branch || 'Genel',
+    questionText: q?.questionText || q?.QuestionText || '',
+    choices: q?.choices || q?.Choices || {},
+    correctAnswer: q?.correctAnswer || q?.CorrectAnswer,
+    imageUrl: q?.imageUrl || q?.ImageUrl,
+    solutionText: q?.solutionText || q?.SolutionText
+  }));
+};
+
 type ViewMode = 'lobby' | 'countdown' | 'match' | 'results';
 
 export default function LobbyPage() {
   const { roomCode } = useParams<{ roomCode: string }>();
   const { user, refreshUser } = useAuth();
-  const { connection, status } = useSignalR();
+  const { connection, status, ensureConnected } = useSignalR();
   const navigate = useNavigate();
 
   // Core state
@@ -54,6 +66,7 @@ export default function LobbyPage() {
   const [playerProgressMap, setPlayerProgressMap] = useState<Record<string, PlayerProgressData>>({});
   const [, setMatchStartTime] = useState<Date | null>(null);
   const [matchDurationSeconds, setMatchDurationSeconds] = useState(225);
+  const [bonusSeconds, setBonusSeconds] = useState(0);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [submitting, setSubmitting] = useState(false);
 
@@ -98,8 +111,8 @@ export default function LobbyPage() {
         setRoom(data);
         const qCount = data.questionCount || data.questions?.length || 5;
         setMatchDurationSeconds(data.durationSeconds || getMatchDuration(qCount));
-        if (data.status === 'InProgress' && data.questions && data.questions.length > 0) {
-          setQuestions(data.questions);
+        if ((data.status === 2 || data.status === 'InProgress') && data.questions && data.questions.length > 0) {
+          setQuestions(normalizeQuestions(data.questions));
           if (data.startTime) {
             const startStr = data.startTime.endsWith('Z') ? data.startTime : data.startTime + 'Z';
             const start = new Date(startStr);
@@ -108,6 +121,16 @@ export default function LobbyPage() {
             setElapsedSeconds(diff);
           }
           setViewMode('match');
+        } else if (data.status === 3 || data.status === 'Finished') {
+          setViewMode('results');
+          getRoomLeaderboard(roomCode).then(({ data: lbData }) => {
+            const list: MatchPlayerResult[] = (lbData as any)?.leaderboard || (lbData as any)?.Leaderboard || [];
+            if (Array.isArray(list) && list.length > 0) {
+              setLeaderboard(list);
+              const me = list.find((p: any) => String(p.userId).toLowerCase() === String(user?.id).toLowerCase());
+              if (me) setMyResult(me);
+            }
+          }).catch(() => {});
         }
         setLoading(false);
       })
@@ -116,13 +139,14 @@ export default function LobbyPage() {
         setError(err.response?.data?.error || 'Oda bulunamadı veya süresi dolmuş.');
         setLoading(false);
       });
-  }, [roomCode, navigate]);
+  }, [roomCode, navigate, user?.id]);
 
   // SignalR events
   useEffect(() => {
-    if (!connection || status !== 'connected' || !roomCode) return;
+    if (!roomCode) return;
+    if (!connection || connection.state !== 'Connected') return;
 
-    connection.invoke('JoinLobby', roomCode).catch((err) => {
+    connection.invoke('JoinLobby', roomCode).catch((err: any) => {
       console.error('JoinLobby invoke failed:', err);
     });
 
@@ -135,7 +159,7 @@ export default function LobbyPage() {
 
       if (state.status === 2 || state.status === 'InProgress') {
         if (state.questions && state.questions.length > 0) {
-          setQuestions(state.questions);
+          setQuestions(normalizeQuestions(state.questions));
         }
         const qCount = state.questionCount || state.questions?.length || 5;
         setMatchDurationSeconds(state.durationSeconds || getMatchDuration(qCount));
@@ -147,6 +171,16 @@ export default function LobbyPage() {
           setElapsedSeconds(diff);
         }
         setViewMode('match');
+      } else if (state.status === 3 || state.status === 'Finished') {
+        setViewMode('results');
+        getRoomLeaderboard(roomCode).then(({ data: lbData }) => {
+          const list: MatchPlayerResult[] = (lbData as any)?.leaderboard || (lbData as any)?.Leaderboard || [];
+          if (Array.isArray(list) && list.length > 0) {
+            setLeaderboard(list);
+            const me = list.find((p: any) => String(p.userId).toLowerCase() === String(user?.id).toLowerCase());
+            if (me) setMyResult(me);
+          }
+        }).catch(() => {});
       }
     };
 
@@ -178,15 +212,17 @@ export default function LobbyPage() {
     };
 
     const handleMatchStarting = (data: MatchStartingData) => {
-      setQuestions(data.questions);
-      const qCount = data.totalQuestions || data.questions?.length || 5;
+      const normQs = normalizeQuestions(data.questions);
+      setQuestions(normQs);
+      const qCount = data.totalQuestions || normQs.length || 5;
       setMatchDurationSeconds(data.durationSeconds || getMatchDuration(qCount));
       const initialAnswers: Record<string, string | null> = {};
-      data.questions.forEach(q => { initialAnswers[q.id] = null; });
+      normQs.forEach(q => { initialAnswers[q.id] = null; });
       setAnswers(initialAnswers);
       const startStr = data.startTime.endsWith('Z') ? data.startTime : data.startTime + 'Z';
       setMatchStartTime(new Date(startStr));
       setElapsedSeconds(0);
+      setBonusSeconds(0);
       autoSubmittedRef.current = false;
       setIsEliminated(false);
 
@@ -254,10 +290,13 @@ export default function LobbyPage() {
       showToast(`🏁 ${data.username} bitirdi!`);
     };
 
-    const handleMatchEnded = (data: MatchEndedData) => {
-      setLeaderboard(data.leaderboard);
-      const me = data.leaderboard.find(p => p.userId === user?.id);
-      if (me) setMyResult(me);
+    const handleMatchEnded = (data: any) => {
+      const list: MatchPlayerResult[] = data?.leaderboard || data?.Leaderboard || [];
+      if (Array.isArray(list) && list.length > 0) {
+        setLeaderboard(list);
+        const me = list.find((p: any) => String(p.userId).toLowerCase() === String(user?.id).toLowerCase());
+        if (me) setMyResult(me);
+      }
       setViewMode('results');
       refreshUser();
       playVictorySound();
@@ -293,7 +332,7 @@ export default function LobbyPage() {
       connection.off('MatchEnded', handleMatchEnded);
       connection.off('LobbyError', handleLobbyError);
     };
-  }, [connection, status, roomCode, room?.users, user?.id, navigate, refreshUser]);
+  }, [connection, status, roomCode, room?.users, user?.id, navigate, refreshUser, ensureConnected]);
 
   // Timer Interval
   useEffect(() => {
@@ -301,7 +340,8 @@ export default function LobbyPage() {
       timerIntervalRef.current = setInterval(() => {
         setElapsedSeconds(prev => {
           const next = prev + 1;
-          if (matchDurationSeconds > 0 && next >= matchDurationSeconds && !autoSubmittedRef.current) {
+          const totalAllowed = matchDurationSeconds + bonusSeconds;
+          if (totalAllowed > 0 && next >= totalAllowed && !autoSubmittedRef.current) {
             autoSubmittedRef.current = true;
             handleAutoSubmitOnTimeUp();
           }
@@ -315,145 +355,217 @@ export default function LobbyPage() {
     return () => {
       if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
     };
-  }, [viewMode, matchDurationSeconds]);
+  }, [viewMode, matchDurationSeconds, bonusSeconds]);
 
 
   const handleAutoSubmitOnTimeUp = async () => {
-    if (!connection || !roomCode) return;
+    if (!roomCode) return;
     try {
       const payload = Object.entries(answers).map(([qId, choice]) => ({
         questionId: qId,
         selectedAnswer: choice
       }));
-      await connection.invoke('SubmitMatch', roomCode, payload);
-      await connection.invoke('ForceTimeUp', roomCode);
+      const conn = await ensureConnected();
+      if (conn) {
+        await conn.invoke('SubmitMatch', roomCode, payload);
+        await conn.invoke('ForceTimeUp', roomCode);
+      }
+      setViewMode('results');
+      const { data: lbData } = await getRoomLeaderboard(roomCode);
+      const list: MatchPlayerResult[] = (lbData as any)?.leaderboard || (lbData as any)?.Leaderboard || [];
+      if (Array.isArray(list) && list.length > 0) {
+        setLeaderboard(list);
+        const me = list.find((p: any) => String(p.userId).toLowerCase() === String(user?.id).toLowerCase());
+        if (me) setMyResult(me);
+      }
     } catch (e) {
       console.warn('Auto submit fallback:', e);
     }
   };
 
   const handleStartMatch = async () => {
-    if (!connection || !roomCode) return;
+    if (!roomCode) return;
     try {
-      await connection.invoke('StartMatch', roomCode);
+      const conn = await ensureConnected();
+      if (!conn) {
+        showToast('⚠️ Sunucu bağlantısı kuruluyor, lütfen tekrar tıklayın...');
+        return;
+      }
+      await conn.invoke('JoinLobby', roomCode).catch(() => {});
+      await conn.invoke('StartMatch', roomCode);
     } catch (e: any) {
-      alert(e.message || 'Savaş başlatılamadı.');
+      showToast(e.message || 'Savaş başlatılamadı.');
+    }
+  };
+
+  const handleSubmitMatch = async () => {
+    if (!roomCode) return;
+    if (!confirm('Sınavı bitirmek istediğinize emin misiniz?')) return;
+
+    setSubmitting(true);
+    setViewMode('results');
+
+    try {
+      const payload = Object.entries(answers).map(([qId, choice]) => ({
+        questionId: qId,
+        selectedAnswer: choice
+      }));
+
+      const conn = await ensureConnected();
+      if (conn) {
+        await conn.invoke('SubmitMatch', roomCode, payload);
+      }
+
+      // Immediate REST leaderboard fetch fallback
+      const { data: lbData } = await getRoomLeaderboard(roomCode);
+      const list: MatchPlayerResult[] = (lbData as any)?.leaderboard || (lbData as any)?.Leaderboard || [];
+      if (Array.isArray(list) && list.length > 0) {
+        setLeaderboard(list);
+        const me = list.find((p: any) => String(p.userId).toLowerCase() === String(user?.id).toLowerCase());
+        if (me) setMyResult(me);
+      }
+      refreshUser();
+      playVictorySound();
+      triggerPodiumConfetti();
+    } catch (e: any) {
+      console.warn('SubmitMatch REST fallback retry:', e);
+      setTimeout(async () => {
+        try {
+          const { data: lbData } = await getRoomLeaderboard(roomCode);
+          const list: MatchPlayerResult[] = (lbData as any)?.leaderboard || (lbData as any)?.Leaderboard || [];
+          if (Array.isArray(list) && list.length > 0) {
+            setLeaderboard(list);
+            const me = list.find((p: any) => String(p.userId).toLowerCase() === String(user?.id).toLowerCase());
+            if (me) setMyResult(me);
+          }
+        } catch {}
+      }, 800);
+    } finally {
+      setSubmitting(false);
     }
   };
 
   const handleToggleReady = async () => {
-    if (!connection || !roomCode) return;
+    if (!roomCode) return;
     try {
-      await connection.invoke('ToggleReady', roomCode);
+      const conn = await ensureConnected();
+      if (!conn) return;
+      await conn.invoke('ToggleReady', roomCode);
     } catch (e) {
       console.error('ToggleReady error:', e);
     }
   };
 
   const handleUseEliminateThree = async () => {
-    if (!user || (user.jokerEliminateThree ?? 0) <= 0 || !currentQuestion || isEliminated) return;
-    if (eliminatedChoicesMap[currentQuestion.id]?.length > 0) {
+    if (!currentQuestion || isEliminated) return;
+    const currentQId = String(currentQuestion.id);
+    if ((eliminatedChoicesMap[currentQId]?.length ?? 0) > 0) {
       showToast('⚠️ Bu soruda zaten 3 şık eleme jokeri kullanıldı.');
+      return;
+    }
+
+    const currentCount = user?.jokerEliminateThree ?? 0;
+    if (currentCount <= 0) {
+      showToast('❌ Yetersiz joker! Mağazadan "3 Şık Eleme" jokeri almalısın.');
       return;
     }
 
     setJokerLoading(true);
     try {
-      let toEliminate: string[] = [];
-      try {
-        const { data } = await useJoker('eliminate_three', currentQuestion.id);
-        if (data.eliminatedChoices && data.eliminatedChoices.length > 0) {
-          toEliminate = data.eliminatedChoices;
-        }
-        await refreshUser();
-      } catch (err) {
-        console.warn('Backend joker fallback:', err);
-      }
-
-      // Fallback: If backend didn't return 3 eliminated choices, pick 3 wrong choices on client
-      if (toEliminate.length === 0) {
-        const allKeys = Object.keys(currentQuestion.choices);
-        const correct = (currentQuestion as any).correctAnswer;
-        const wrongs = allKeys.filter(k => k !== correct);
-        toEliminate = wrongs.slice(0, 3);
-        if (toEliminate.length < 3 && allKeys.length > 2) {
-          toEliminate = allKeys.slice(0, allKeys.length - 2);
-        }
-      }
-
-      setEliminatedChoicesMap(prev => ({
-        ...prev,
-        [currentQuestion.id]: toEliminate
-      }));
-
-      // If current answer was eliminated, clear it
-      if (toEliminate.includes(answers[currentQuestion.id] || '')) {
-        const newAns = { ...answers, [currentQuestion.id]: null };
-        setAnswers(newAns);
-      }
-      if (selectedDoubleChoicesMap[currentQuestion.id]) {
-        setSelectedDoubleChoicesMap(prev => ({
+      const { data } = await useJoker('eliminate_three', currentQId);
+      const serverWrongs = data?.eliminatedChoices || (data as any)?.EliminatedChoices || [];
+      if (Array.isArray(serverWrongs) && serverWrongs.length > 0) {
+        const normalized = serverWrongs.map((c: string) => String(c).trim().toUpperCase());
+        setEliminatedChoicesMap(prev => ({
           ...prev,
-          [currentQuestion.id]: (prev[currentQuestion.id] || []).filter(c => !toEliminate.includes(c))
+          [currentQId]: normalized
         }));
-      }
 
-      showToast('🎯 3 Yanlış Şık Silindi! 2 şık kaldı.');
-      triggerPodiumConfetti();
-    } catch (e: any) {
-      showToast(e.response?.data?.message || e.response?.data || 'Joker kullanılamadı.');
+        // If currently selected answer was in eliminated choices, unselect it
+        const currentAns = answers[currentQId];
+        if (currentAns && normalized.includes(currentAns.trim().toUpperCase())) {
+          setAnswers(prev => ({ ...prev, [currentQId]: null }));
+        }
+
+        showToast('🎯 3 Yanlış Şık Elendi! Sadece 2 şık kaldı.');
+        triggerPodiumConfetti();
+      } else {
+        showToast('⚠️ Şıklar elenemedi veya bu soru için yeterli şık yok.');
+      }
+      await refreshUser();
+    } catch (err: any) {
+      const msg = err.response?.data?.message || err.response?.data || 'Joker kullanılamadı.';
+      showToast(`⚠️ ${typeof msg === 'string' ? msg : 'Joker kullanılamadı.'}`);
     } finally {
       setJokerLoading(false);
     }
   };
 
   const handleUseDoubleChance = async () => {
-    if (!user || (user.jokerDoubleChance ?? 0) <= 0 || !currentQuestion || isEliminated) return;
-    if (doubleChanceActiveMap[currentQuestion.id]) {
+    if (!currentQuestion || isEliminated) return;
+    const currentQId = String(currentQuestion.id);
+    if (doubleChanceActiveMap[currentQId]) {
       showToast('⚠️ Bu soruda zaten çift cevap jokeri aktif.');
+      return;
+    }
+
+    const currentCount = user?.jokerDoubleChance ?? 0;
+    if (currentCount <= 0) {
+      showToast('❌ Yetersiz joker! Mağazadan "Çift Cevap" jokeri almalısın.');
       return;
     }
 
     setJokerLoading(true);
     try {
-      await useJoker('double_chance');
-      await refreshUser();
-
+      await useJoker('double_chance', currentQId);
       setDoubleChanceActiveMap(prev => ({
         ...prev,
-        [currentQuestion.id]: true
+        [currentQId]: true
       }));
 
-      const curr = answers[currentQuestion.id];
+      const curr = answers[currentQId];
       if (curr) {
         setSelectedDoubleChoicesMap(prev => ({
           ...prev,
-          [currentQuestion.id]: curr.split(',').filter(Boolean)
+          [currentQId]: curr.split(',').map(c => c.trim().toUpperCase()).filter(Boolean)
+        }));
+      } else {
+        setSelectedDoubleChoicesMap(prev => ({
+          ...prev,
+          [currentQId]: []
         }));
       }
 
       showToast('✌️ Çift Cevap Jokeri Aktif! Şimdi 2 şık seçebilirsin.');
       triggerPodiumConfetti();
-    } catch (e: any) {
-      showToast(e.response?.data?.message || e.response?.data || 'Joker kullanılamadı.');
+      await refreshUser();
+    } catch (err: any) {
+      const msg = err.response?.data?.message || err.response?.data || 'Joker kullanılamadı.';
+      showToast(`⚠️ ${typeof msg === 'string' ? msg : 'Joker kullanılamadı.'}`);
     } finally {
       setJokerLoading(false);
     }
   };
 
   const handleUseExtraTime = async () => {
-    if (!user || (user.jokerExtraTime ?? 0) <= 0 || isEliminated) return;
+    if (isEliminated) return;
+
+    const currentCount = user?.jokerExtraTime ?? 0;
+    if (currentCount <= 0) {
+      showToast('❌ Yetersiz joker! Mağazadan "Ekstra Süre" jokeri almalısın.');
+      return;
+    }
 
     setJokerLoading(true);
     try {
       await useJoker('extra_time');
-      await refreshUser();
-
-      setMatchDurationSeconds(prev => prev + 15);
-      showToast('⏳ Toplam Sürene +15 Saniye Eklendi!');
+      setBonusSeconds(prev => prev + 15);
+      showToast('⏳ Düello Sürene +15 Saniye Eklendi!');
       triggerPodiumConfetti();
-    } catch (e: any) {
-      showToast(e.response?.data?.message || e.response?.data || 'Joker kullanılamadı.');
+      await refreshUser();
+    } catch (err: any) {
+      const msg = err.response?.data?.message || err.response?.data || 'Joker kullanılamadı.';
+      showToast(`⚠️ ${typeof msg === 'string' ? msg : 'Joker kullanılamadı.'}`);
     } finally {
       setJokerLoading(false);
     }
@@ -461,62 +573,66 @@ export default function LobbyPage() {
 
   const handleSelectChoice = (questionId: string, choiceKey: string) => {
     if (isEliminated) return;
+    const qIdStr = String(questionId);
+    const normalizedChoice = choiceKey.trim().toUpperCase();
 
     // Block if choice was eliminated
-    if (eliminatedChoicesMap[questionId]?.includes(choiceKey)) {
+    const eliminated = (eliminatedChoicesMap[qIdStr] || []).map(k => k.trim().toUpperCase());
+    if (eliminated.includes(normalizedChoice)) {
       showToast('🚫 Bu şık elenmiştir, seçilemez.');
       return;
     }
 
-    const isDoubleChance = doubleChanceActiveMap[questionId];
+    const isDoubleChance = Boolean(doubleChanceActiveMap[qIdStr]);
 
     if (isDoubleChance) {
-      const currentSelected = selectedDoubleChoicesMap[questionId] || [];
+      const currentSelected = (selectedDoubleChoicesMap[qIdStr] || []).map(k => k.trim().toUpperCase());
       let newSelected: string[];
 
-      if (currentSelected.includes(choiceKey)) {
-        newSelected = currentSelected.filter(k => k !== choiceKey);
+      if (currentSelected.includes(normalizedChoice)) {
+        newSelected = currentSelected.filter(k => k !== normalizedChoice);
       } else if (currentSelected.length < 2) {
-        newSelected = [...currentSelected, choiceKey];
+        newSelected = [...currentSelected, normalizedChoice];
       } else {
-        newSelected = [currentSelected[1], choiceKey];
+        newSelected = [currentSelected[1], normalizedChoice];
       }
 
       setSelectedDoubleChoicesMap(prev => ({
         ...prev,
-        [questionId]: newSelected
+        [qIdStr]: newSelected
       }));
 
       const answerValue = newSelected.length > 0 ? newSelected.join(',') : null;
 
       const newAnswers = {
         ...answers,
-        [questionId]: answerValue
+        [qIdStr]: answerValue
       };
       setAnswers(newAnswers);
 
       const answeredCount = Object.values(newAnswers).filter(a => a !== null).length;
       if (connection && roomCode && connection.state === 'Connected') {
-        connection.invoke('UpdateProgress', roomCode, currentQuestionIndex, answeredCount, questionId, answerValue).catch(() => {});
+        connection.invoke('UpdateProgress', roomCode, currentQuestionIndex, answeredCount, qIdStr, answerValue).catch(() => {});
       }
       return;
     }
 
-    const newChoice = answers[questionId] === choiceKey ? null : choiceKey;
+    const currentSingle = answers[qIdStr]?.trim().toUpperCase();
+    const newChoice = currentSingle === normalizedChoice ? null : normalizedChoice;
     const newAnswers = {
       ...answers,
-      [questionId]: newChoice
+      [qIdStr]: newChoice
     };
     setAnswers(newAnswers);
 
     const answeredCount = Object.values(newAnswers).filter(a => a !== null).length;
 
     if (connection && roomCode && connection.state === 'Connected') {
-      connection.invoke('UpdateProgress', roomCode, currentQuestionIndex, answeredCount, questionId, newChoice).catch(() => {});
+      connection.invoke('UpdateProgress', roomCode, currentQuestionIndex, answeredCount, qIdStr, newChoice).catch(() => {});
 
       // If Sudden Death mode, test answer immediately
       if (room?.mode === 3 && newChoice) {
-        connection.invoke('SubmitSuddenDeathAnswer', roomCode, questionId, newChoice).catch(() => {});
+        connection.invoke('SubmitSuddenDeathAnswer', roomCode, qIdStr, newChoice).catch(() => {});
       }
     }
   };
@@ -529,24 +645,6 @@ export default function LobbyPage() {
     }
   };
 
-  const handleSubmitMatch = async () => {
-    if (!connection || !roomCode) return;
-    if (!confirm('Sınavı bitirmek istediğinize emin misiniz?')) return;
-
-    setSubmitting(true);
-    try {
-      const payload = Object.entries(answers).map(([qId, choice]) => ({
-        questionId: qId,
-        selectedAnswer: choice
-      }));
-
-      await connection.invoke('SubmitMatch', roomCode, payload);
-      setViewMode('results');
-    } catch (e: any) {
-      alert(e.message || 'Sınav gönderilirken hata oluştu.');
-      setSubmitting(false);
-    }
-  };
 
   const handleLeaveRoom = async () => {
     if (!confirm('Lobiden ayrılmak istediğinize emin misiniz?')) return;
@@ -610,7 +708,7 @@ export default function LobbyPage() {
   const totalQuestions = questions.length > 0 ? questions.length : room.questionCount;
   const currentQuestion = questions[currentQuestionIndex];
   const myAnsweredCount = Object.values(answers).filter(a => a !== null).length;
-  const remainingSeconds = Math.max(0, matchDurationSeconds - elapsedSeconds);
+  const remainingSeconds = Math.max(0, matchDurationSeconds + bonusSeconds - elapsedSeconds);
 
   return (
     <div className="min-h-screen bg-[#060710] flex justify-center">
@@ -663,100 +761,110 @@ export default function LobbyPage() {
               <h2 className="text-xl font-black text-white">{room.title}</h2>
             </div>
 
-            {/* Mobile 3D Podium Block */}
-            <div className="game-card-3d p-4 pt-8">
-              <div className="flex items-end justify-center gap-2 max-w-xs mx-auto">
-                {leaderboard[1] && (
-                  <div className="flex-1 flex flex-col items-center">
-                    <div className="text-2xl mb-1">🥈</div>
-                    <div className="text-[10px] font-bold text-white truncate max-w-[70px]">{leaderboard[1].username}</div>
-                    <div className="text-[9px] font-mono text-cyan-400 font-bold mb-1">{leaderboard[1].netScore.toFixed(1)} N</div>
-                    <div className="w-full bg-slate-600/40 border-t-2 border-slate-400 rounded-t-xl h-24 flex flex-col items-center justify-center">
-                      <span className="font-black text-slate-200 text-lg">2</span>
-                      <span className="text-[8px] text-slate-300 font-bold">{leaderboard[1].coinsGained > 0 ? `+${leaderboard[1].coinsGained} 💰` : '0 💰'}</span>
-                    </div>
-                  </div>
-                )}
-
-                {leaderboard[0] && (
-                  <div className="flex-1 flex flex-col items-center">
-                    <div className="text-3xl mb-1 animate-bounce-subtle">👑</div>
-                    <div className="text-xs font-black text-amber-300 truncate max-w-[80px]">{leaderboard[0].username}</div>
-                    <div className="text-[10px] font-mono text-emerald-400 font-black mb-1">{leaderboard[0].netScore.toFixed(1)} N</div>
-                    <div className="w-full bg-amber-500/30 border-t-2 border-amber-400 rounded-t-xl h-36 flex flex-col items-center justify-center">
-                      <span className="font-black text-amber-300 text-2xl">1</span>
-                      <span className="text-[9px] text-amber-200 font-black">{leaderboard[0].coinsGained > 0 ? `+${leaderboard[0].coinsGained} 💰` : '0 💰'}</span>
-                    </div>
-                  </div>
-                )}
-
-                {leaderboard[2] && (
-                  <div className="flex-1 flex flex-col items-center">
-                    <div className="text-2xl mb-1">🥉</div>
-                    <div className="text-[10px] font-bold text-white truncate max-w-[70px]">{leaderboard[2].username}</div>
-                    <div className="text-[9px] font-mono text-cyan-400 font-bold mb-1">{leaderboard[2].netScore.toFixed(1)} N</div>
-                    <div className="w-full bg-amber-900/40 border-t-2 border-amber-700 rounded-t-xl h-18 flex flex-col items-center justify-center">
-                      <span className="font-black text-amber-600 text-base">3</span>
-                      <span className="text-[8px] text-amber-500 font-bold">{leaderboard[2].coinsGained > 0 ? `+${leaderboard[2].coinsGained} 💰` : '0 💰'}</span>
-                    </div>
-                  </div>
-                )}
+            {leaderboard.length === 0 ? (
+              <div className="game-card-3d p-8 text-center space-y-4">
+                <div className="w-12 h-12 border-3 border-amber-400 border-t-transparent rounded-full animate-spin mx-auto" />
+                <div className="text-white font-black text-sm">Sonuçlar Hesaplanıyor...</div>
+                <p className="text-[11px] text-slate-400">Podyum ve sıralamalar yükleniyor, lütfen bekleyin.</p>
               </div>
-            </div>
+            ) : (
+              <>
+                {/* Mobile 3D Podium Block */}
+                <div className="game-card-3d p-4 pt-8">
+                  <div className="flex items-end justify-center gap-2 max-w-xs mx-auto">
+                    {leaderboard[1] && (
+                      <div className="flex-1 flex flex-col items-center">
+                        <div className="text-2xl mb-1">🥈</div>
+                        <div className="text-[10px] font-bold text-white truncate max-w-[70px]">{leaderboard[1].username}</div>
+                        <div className="text-[9px] font-mono text-cyan-400 font-bold mb-1">{leaderboard[1].netScore.toFixed(1)} N</div>
+                        <div className="w-full bg-slate-600/40 border-t-2 border-slate-400 rounded-t-xl h-24 flex flex-col items-center justify-center">
+                          <span className="font-black text-slate-200 text-lg">2</span>
+                          <span className="text-[8px] text-slate-300 font-bold">{leaderboard[1].coinsGained > 0 ? `+${leaderboard[1].coinsGained} 💰` : '0 💰'}</span>
+                        </div>
+                      </div>
+                    )}
 
-            {myResult && (
-              <div className="bg-[#171b38] border-2 border-violet-500 rounded-2xl p-4 flex items-center justify-between shadow-xl">
-                <div>
-                  <div className="text-[10px] text-violet-400 font-bold uppercase">Senin Derecen</div>
-                  <div className="text-lg font-black text-white font-mono">Sıralama: #{myResult.rank}</div>
-                  <div className="text-[10px] text-slate-400 font-mono mt-0.5">
-                    {myResult.correctCount}D • {myResult.wrongCount}Y • {myResult.blankCount}B • {(myResult.durationMs / 1000).toFixed(1)}s
+                    {leaderboard[0] && (
+                      <div className="flex-1 flex flex-col items-center">
+                        <div className="text-3xl mb-1 animate-bounce-subtle">👑</div>
+                        <div className="text-xs font-black text-amber-300 truncate max-w-[80px]">{leaderboard[0].username}</div>
+                        <div className="text-[10px] font-mono text-emerald-400 font-black mb-1">{leaderboard[0].netScore.toFixed(1)} N</div>
+                        <div className="w-full bg-amber-500/30 border-t-2 border-amber-400 rounded-t-xl h-36 flex flex-col items-center justify-center">
+                          <span className="font-black text-amber-300 text-2xl">1</span>
+                          <span className="text-[9px] text-amber-200 font-black">{leaderboard[0].coinsGained > 0 ? `+${leaderboard[0].coinsGained} 💰` : '0 💰'}</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {leaderboard[2] && (
+                      <div className="flex-1 flex flex-col items-center">
+                        <div className="text-2xl mb-1">🥉</div>
+                        <div className="text-[10px] font-bold text-white truncate max-w-[70px]">{leaderboard[2].username}</div>
+                        <div className="text-[9px] font-mono text-cyan-400 font-bold mb-1">{leaderboard[2].netScore.toFixed(1)} N</div>
+                        <div className="w-full bg-amber-900/40 border-t-2 border-amber-700 rounded-t-xl h-18 flex flex-col items-center justify-center">
+                          <span className="font-black text-amber-600 text-base">3</span>
+                          <span className="text-[8px] text-amber-500 font-bold">{leaderboard[2].coinsGained > 0 ? `+${leaderboard[2].coinsGained} 💰` : '0 💰'}</span>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
-                <div className="flex gap-2">
-                  <div className="bg-violet-600/30 border border-violet-500/40 px-2.5 py-1.5 rounded-xl text-center">
-                    <div className="text-[8px] text-slate-400 font-bold">XP</div>
-                    <div className="text-xs font-black text-violet-300 font-mono">+{myResult.xpGained}</div>
-                  </div>
-                  <div className="bg-amber-500/20 border border-amber-500/40 px-2.5 py-1.5 rounded-xl text-center">
-                    <div className="text-[8px] text-slate-400 font-bold">Coin</div>
-                    <div className="text-xs font-black text-amber-300 font-mono">{myResult.coinsGained > 0 ? `+${myResult.coinsGained} 💰` : '0 💰'}</div>
-                  </div>
-                </div>
-              </div>
-            )}
 
-            <div className="space-y-2">
-              <div className="text-xs font-black text-slate-300 px-1">Tüm Oyuncular</div>
-              {(Array.isArray(leaderboard) ? leaderboard : []).map((p, idx) => (
-                <div
-                  key={p.userId}
-                  className={`p-3 rounded-2xl border flex items-center justify-between ${
-                    p.userId === user?.id ? 'bg-violet-950/40 border-violet-500' : 'bg-[#171b38] border-white/5'
-                  }`}
-                >
-                  <div className="flex items-center gap-2.5">
-                    <span className="font-mono font-black text-base w-6 text-center">
-                      {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}`}
-                    </span>
+                {myResult && (
+                  <div className="bg-[#171b38] border-2 border-violet-500 rounded-2xl p-4 flex items-center justify-between shadow-xl">
                     <div>
-                      <div className="text-xs font-black text-white flex items-center gap-1.5">
-                        <span>{p.username}</span>
-                        {p.isEliminated && <span className="text-[8px] bg-rose-600 text-white px-1 rounded font-bold">ELENDİ</span>}
+                      <div className="text-[10px] text-violet-400 font-bold uppercase">Senin Derecen</div>
+                      <div className="text-lg font-black text-white font-mono">Sıralama: #{myResult.rank}</div>
+                      <div className="text-[10px] text-slate-400 font-mono mt-0.5">
+                        {myResult.correctCount}D • {myResult.wrongCount}Y • {myResult.blankCount}B • {(myResult.durationMs / 1000).toFixed(1)}s
                       </div>
-                      <div className="text-[9px] text-slate-400 font-mono">
-                        {(p.durationMs / 1000).toFixed(1)}s
+                    </div>
+                    <div className="flex gap-2">
+                      <div className="bg-violet-600/30 border border-violet-500/40 px-2.5 py-1.5 rounded-xl text-center">
+                        <div className="text-[8px] text-slate-400 font-bold">XP</div>
+                        <div className="text-xs font-black text-violet-300 font-mono">+{myResult.xpGained}</div>
+                      </div>
+                      <div className="bg-amber-500/20 border border-amber-500/40 px-2.5 py-1.5 rounded-xl text-center">
+                        <div className="text-[8px] text-slate-400 font-bold">Coin</div>
+                        <div className="text-xs font-black text-amber-300 font-mono">{myResult.coinsGained > 0 ? `+${myResult.coinsGained} 💰` : '0 💰'}</div>
                       </div>
                     </div>
                   </div>
+                )}
 
-                  <div className="text-right">
-                    <div className="text-sm font-black text-emerald-400 font-mono">{p.netScore.toFixed(1)} Net</div>
-                    <div className="text-[9px] text-amber-300 font-bold">{p.coinsGained > 0 ? `+${p.coinsGained} 💰` : '0 💰'}</div>
-                  </div>
+                <div className="space-y-2">
+                  <div className="text-xs font-black text-slate-300 px-1">Tüm Oyuncular</div>
+                  {(Array.isArray(leaderboard) ? leaderboard : []).map((p, idx) => (
+                    <div
+                      key={p.userId}
+                      className={`p-3 rounded-2xl border flex items-center justify-between ${
+                        p.userId === user?.id ? 'bg-violet-950/40 border-violet-500' : 'bg-[#171b38] border-white/5'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <span className="font-mono font-black text-base w-6 text-center">
+                          {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}`}
+                        </span>
+                        <div>
+                          <div className="text-xs font-black text-white flex items-center gap-1.5">
+                            <span>{p.username}</span>
+                            {p.isEliminated && <span className="text-[8px] bg-rose-600 text-white px-1 rounded font-bold">ELENDİ</span>}
+                          </div>
+                          <div className="text-[9px] text-slate-400 font-mono">
+                            {(p.durationMs / 1000).toFixed(1)}s
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="text-right">
+                        <div className="text-sm font-black text-emerald-400 font-mono">{p.netScore.toFixed(1)} Net</div>
+                        <div className="text-[9px] text-amber-300 font-bold">{p.coinsGained > 0 ? `+${p.coinsGained} 💰` : '0 💰'}</div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </>
+            )}
 
 
             <div className="space-y-2 pt-1">
@@ -865,17 +973,21 @@ export default function LobbyPage() {
                 {/* Joker 1: 3 Şık Eleme */}
                 <button
                   onClick={handleUseEliminateThree}
-                  disabled={jokerLoading || isEliminated || (user?.jokerEliminateThree ?? 0) <= 0 || (currentQuestion && (eliminatedChoicesMap[currentQuestion.id]?.length ?? 0) > 0)}
+                  disabled={jokerLoading || isEliminated || (currentQuestion && (eliminatedChoicesMap[String(currentQuestion.id)]?.length ?? 0) > 0) || (user?.jokerEliminateThree ?? 0) <= 0}
                   title="3 Yanlış Şıkkı Ele"
-                  className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[10px] font-black transition-all cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed ${
-                    currentQuestion && (eliminatedChoicesMap[currentQuestion.id]?.length ?? 0) > 0
+                  className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[10px] font-black transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
+                    currentQuestion && (eliminatedChoicesMap[String(currentQuestion.id)]?.length ?? 0) > 0
                       ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-                      : 'bg-[#1c2148] hover:bg-[#252b5e] text-white border border-white/10 active:scale-95'
+                      : (user?.jokerEliminateThree ?? 0) > 0
+                      ? 'bg-[#1c2148] hover:bg-[#252b5e] text-white border border-amber-400/30 active:scale-95 shadow'
+                      : 'bg-[#1c2148]/50 text-slate-400 border border-white/5'
                   }`}
                 >
                   <span className="text-xs">🎯</span>
                   <span>3 Ele</span>
-                  <span className="bg-amber-400 text-slate-950 px-1 py-0.2 rounded font-black text-[9px]">
+                  <span className={`px-1.5 py-0.2 rounded-md font-black text-[9px] ${
+                    (user?.jokerEliminateThree ?? 0) > 0 ? 'bg-amber-400 text-slate-950 font-bold' : 'bg-slate-700 text-slate-400'
+                  }`}>
                     {user?.jokerEliminateThree ?? 0}
                   </span>
                 </button>
@@ -883,17 +995,21 @@ export default function LobbyPage() {
                 {/* Joker 2: Çift Cevap */}
                 <button
                   onClick={handleUseDoubleChance}
-                  disabled={jokerLoading || isEliminated || (user?.jokerDoubleChance ?? 0) <= 0 || (currentQuestion && doubleChanceActiveMap[currentQuestion.id])}
+                  disabled={jokerLoading || isEliminated || (currentQuestion && doubleChanceActiveMap[String(currentQuestion.id)]) || (user?.jokerDoubleChance ?? 0) <= 0}
                   title="2 Şık İşaretleme Hakkı"
-                  className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[10px] font-black transition-all cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed ${
-                    currentQuestion && doubleChanceActiveMap[currentQuestion.id]
+                  className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[10px] font-black transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
+                    currentQuestion && doubleChanceActiveMap[String(currentQuestion.id)]
                       ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 animate-pulse'
-                      : 'bg-[#1c2148] hover:bg-[#252b5e] text-white border border-white/10 active:scale-95'
+                      : (user?.jokerDoubleChance ?? 0) > 0
+                      ? 'bg-[#1c2148] hover:bg-[#252b5e] text-white border border-cyan-400/30 active:scale-95 shadow'
+                      : 'bg-[#1c2148]/50 text-slate-400 border border-white/5'
                   }`}
                 >
                   <span className="text-xs">✌️</span>
                   <span>Çift Hak</span>
-                  <span className="bg-cyan-400 text-slate-950 px-1 py-0.2 rounded font-black text-[9px]">
+                  <span className={`px-1.5 py-0.2 rounded-md font-black text-[9px] ${
+                    (user?.jokerDoubleChance ?? 0) > 0 ? 'bg-cyan-400 text-slate-950 font-bold' : 'bg-slate-700 text-slate-400'
+                  }`}>
                     {user?.jokerDoubleChance ?? 0}
                   </span>
                 </button>
@@ -903,11 +1019,17 @@ export default function LobbyPage() {
                   onClick={handleUseExtraTime}
                   disabled={jokerLoading || isEliminated || (user?.jokerExtraTime ?? 0) <= 0}
                   title="Düello Süresine +15 Saniye Ekle"
-                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[10px] font-black bg-[#1c2148] hover:bg-[#252b5e] text-white border border-white/10 active:scale-95 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                  className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[10px] font-black transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
+                    (user?.jokerExtraTime ?? 0) > 0
+                      ? 'bg-[#1c2148] hover:bg-[#252b5e] text-white border border-emerald-400/30 active:scale-95 shadow'
+                      : 'bg-[#1c2148]/50 text-slate-400 border border-white/5'
+                  }`}
                 >
                   <span className="text-xs">⏳</span>
                   <span>+15s</span>
-                  <span className="bg-emerald-400 text-slate-950 px-1 py-0.2 rounded font-black text-[9px]">
+                  <span className={`px-1.5 py-0.2 rounded-md font-black text-[9px] ${
+                    (user?.jokerExtraTime ?? 0) > 0 ? 'bg-emerald-400 text-slate-950 font-bold' : 'bg-slate-700 text-slate-400'
+                  }`}>
                     {user?.jokerExtraTime ?? 0}
                   </span>
                 </button>
@@ -932,18 +1054,51 @@ export default function LobbyPage() {
                   )}
                 </div>
 
+                {/* Active Joker Notifications */}
+                {currentQuestion && (eliminatedChoicesMap[String(currentQuestion.id)]?.length ?? 0) > 0 && (
+                  <div className="bg-gradient-to-r from-amber-500/20 to-orange-500/20 border border-amber-400/50 p-2.5 rounded-xl flex items-center justify-between text-xs font-black text-amber-300 shadow">
+                    <div className="flex items-center gap-2">
+                      <span className="text-base">🎯</span>
+                      <span>3 Yanlış Şık Elendi! Sadece 2 şık kaldı.</span>
+                    </div>
+                    <span className="bg-amber-400 text-slate-950 px-2 py-0.5 rounded-md text-[10px] font-black">
+                      2 Şık
+                    </span>
+                  </div>
+                )}
+
+                {currentQuestion && doubleChanceActiveMap[String(currentQuestion.id)] && (
+                  <div className="bg-gradient-to-r from-cyan-500/20 to-blue-500/20 border border-cyan-400/50 p-2.5 rounded-xl flex items-center justify-between text-xs font-black text-cyan-300 animate-pulse shadow">
+                    <div className="flex items-center gap-2">
+                      <span className="text-base">✌️</span>
+                      <span>Çift Cevap Aktif! 2 şık seçebilirsin.</span>
+                    </div>
+                    <span className="bg-cyan-400 text-slate-950 px-2 py-0.5 rounded-md text-[10px] font-black">
+                      {(selectedDoubleChoicesMap[String(currentQuestion.id)] || []).length}/2 Seçildi
+                    </span>
+                  </div>
+                )}
+
                 {/* Choices */}
-                <div className="space-y-2.5 pt-2">
+                <div className="space-y-2.5 pt-1">
                   {Object.entries(currentQuestion?.choices || {})
-                    .filter(([key]) => !eliminatedChoicesMap[currentQuestion?.id || '']?.includes(key))
+                    .filter(([key]) => {
+                      const qIdStr = String(currentQuestion?.id || '');
+                      const eliminated = (eliminatedChoicesMap[qIdStr] || []).map(k => k.trim().toUpperCase());
+                      return !eliminated.includes(key.trim().toUpperCase());
+                    })
                     .map(([key, text]) => {
-                      const isDoubleActive = doubleChanceActiveMap[currentQuestion.id];
+                      const qIdStr = String(currentQuestion.id);
+                      const normalizedKey = key.trim().toUpperCase();
+                      const isDoubleActive = Boolean(doubleChanceActiveMap[qIdStr]);
+                      const selectedDouble = (selectedDoubleChoicesMap[qIdStr] || []).map(k => k.trim().toUpperCase());
+
                       const isSelected = isDoubleActive
-                        ? (selectedDoubleChoicesMap[currentQuestion.id] || []).includes(key)
-                        : answers[currentQuestion.id] === key;
+                        ? selectedDouble.includes(normalizedKey)
+                        : (answers[qIdStr]?.trim().toUpperCase() === normalizedKey);
 
                       const choiceIndex = isDoubleActive && isSelected
-                        ? (selectedDoubleChoicesMap[currentQuestion.id] || []).indexOf(key) + 1
+                        ? selectedDouble.indexOf(normalizedKey) + 1
                         : 0;
 
                       return (
@@ -960,7 +1115,7 @@ export default function LobbyPage() {
                           <span className={`w-8 h-8 rounded-xl flex items-center justify-center mr-3 text-xs font-black font-mono shrink-0 transition-colors ${
                             isSelected ? 'bg-cyan-400 text-slate-950 shadow-md font-extrabold' : 'bg-black/30 text-slate-400'
                           }`}>
-                            {key}
+                            {key.trim().toUpperCase()}
                           </span>
                           <span className="flex-1 leading-snug text-slate-100">{text}</span>
                           {isDoubleActive && isSelected && (
@@ -1147,6 +1302,7 @@ export default function LobbyPage() {
         <QuestionReviewModal
           isOpen={showReviewModal}
           onClose={() => setShowReviewModal(false)}
+          roomCode={roomCode}
           answers={answers}
           fallbackQuestions={questions}
         />

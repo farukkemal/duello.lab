@@ -49,6 +49,24 @@ public class AuthController : ControllerBase
     }
 
     [Authorize]
+    [HttpPut("profile")]
+    public async Task<ActionResult<UserDto>> UpdateProfile([FromBody] UpdateProfileDto dto)
+    {
+        var userId = Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier)!.Value);
+        var user = await _authService.UpdateProfileAsync(userId, dto);
+        return Ok(user);
+    }
+
+    [Authorize]
+    [HttpGet("profile/{identifier}")]
+    public async Task<ActionResult<PublicProfileDto>> GetPublicProfile(string identifier)
+    {
+        var profile = await _authService.GetPublicProfileAsync(identifier);
+        if (profile == null) return NotFound("Kullanıcı profili bulunamadı.");
+        return Ok(profile);
+    }
+
+    [Authorize]
     [HttpPost("claim-coins")]
     public async Task<ActionResult<UserDto>> ClaimCoins()
     {

@@ -238,41 +238,52 @@ public class StoreController : ControllerBase
         if (user == null) return NotFound("Kullanıcı bulunamadı.");
 
         var eliminatedChoices = new List<string>();
+        var jokerType = (dto.JokerType ?? string.Empty).Trim().ToLowerInvariant();
 
-        switch (dto.JokerType)
+        switch (jokerType)
         {
             case "eliminate_three":
             case "joker_eliminate_three":
-                if (user.JokerEliminateThree <= 0) return BadRequest("3 Şık Eleme Jokeriniz kalmadı!");
+                if (user.JokerEliminateThree <= 0)
+                {
+                    return BadRequest("Yetersiz joker! Mağazadan '3 Şık Eleme' jokeri satın almalısınız.");
+                }
 
                 if (dto.QuestionId.HasValue)
                 {
-                    var q = await _db.Questions.FindAsync(dto.QuestionId.Value);
-                    if (q != null && q.Choices.Count > 2)
+                    var q = await _db.Questions.FirstOrDefaultAsync(x => x.Id == dto.QuestionId.Value);
+                    if (q != null && q.Choices != null && q.Choices.Count > 2)
                     {
-                        var correctKey = q.CorrectAnswer.Trim().ToUpperInvariant();
+                        var correctKey = (q.CorrectAnswer ?? "").Trim().ToUpperInvariant();
                         var wrongKeys = q.Choices.Keys
                             .Where(k => !k.Trim().Equals(correctKey, StringComparison.OrdinalIgnoreCase))
+                            .Select(k => k.Trim().ToUpperInvariant())
                             .OrderBy(_ => Guid.NewGuid())
-                            .Take(3)
+                            .Take(Math.Min(3, q.Choices.Count - 2))
                             .ToList();
                         eliminatedChoices = wrongKeys;
                     }
                 }
 
-                user.JokerEliminateThree--;
+                user.JokerEliminateThree = Math.Max(0, user.JokerEliminateThree - 1);
                 break;
 
             case "double_chance":
             case "joker_double_chance":
-                if (user.JokerDoubleChance <= 0) return BadRequest("Çift Cevap Hakkı Jokeriniz kalmadı!");
-                user.JokerDoubleChance--;
+                if (user.JokerDoubleChance <= 0)
+                {
+                    return BadRequest("Yetersiz joker! Mağazadan 'Çift Cevap Hakkı' jokeri satın almalısınız.");
+                }
+                user.JokerDoubleChance = Math.Max(0, user.JokerDoubleChance - 1);
                 break;
 
             case "extra_time":
             case "joker_extra_time":
-                if (user.JokerExtraTime <= 0) return BadRequest("+15 Sn Süre Jokeriniz kalmadı!");
-                user.JokerExtraTime--;
+                if (user.JokerExtraTime <= 0)
+                {
+                    return BadRequest("Yetersiz joker! Mağazadan 'Ekstra Süre' jokeri satın almalısınız.");
+                }
+                user.JokerExtraTime = Math.Max(0, user.JokerExtraTime - 1);
                 break;
 
             default:

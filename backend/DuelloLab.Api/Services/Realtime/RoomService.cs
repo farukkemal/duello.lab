@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using DuelloLab.Api.Data;
+using DuelloLab.Api.DTOs.Analytics;
 using DuelloLab.Api.DTOs.Exam;
 using DuelloLab.Api.DTOs.Room;
 using DuelloLab.Api.Entities;
@@ -389,6 +390,49 @@ public class RoomService : IRoomService
 
 
         MatchEndedDto? matchEnded = null;
+
+        // If all human participants have submitted, instantly finalize remaining bots to avoid waiting
+        bool allHumansFinished = room.Users.Values.Where(u => !u.IsBot).All(u => u.IsFinished);
+        if (allHumansFinished)
+        {
+            var rng = new Random();
+            foreach (var botUser in room.Users.Values.Where(u => u.IsBot && !u.IsFinished))
+            {
+                var cfg = BotDifficultyConfig.Get(botUser.BotDifficulty);
+                int bCorrect = 0, bWrong = 0, bBlank = 0;
+                foreach (var qId in room.QuestionIds)
+                {
+                    if (!questionEntities.TryGetValue(qId, out var q)) { bBlank++; continue; }
+                    double r = rng.NextDouble();
+                    if (r < cfg.CorrectRate)
+                    {
+                        botUser.UserAnswers[qId] = q.CorrectAnswer;
+                        bCorrect++;
+                    }
+                    else if (r < cfg.CorrectRate + cfg.WrongRate)
+                    {
+                        var wrongChoices = q.Choices.Keys.Where(k => !k.Equals(q.CorrectAnswer, StringComparison.OrdinalIgnoreCase)).ToList();
+                        botUser.UserAnswers[qId] = wrongChoices.Count > 0 ? wrongChoices[rng.Next(wrongChoices.Count)] : null;
+                        bWrong++;
+                    }
+                    else
+                    {
+                        botUser.UserAnswers[qId] = null;
+                        bBlank++;
+                    }
+                }
+                botUser.CorrectCount = bCorrect;
+                botUser.WrongCount = bWrong;
+                botUser.BlankCount = bBlank;
+                botUser.NetScore = bCorrect - (bWrong / 2.0m);
+                botUser.DurationMs = Math.Max(0, (long)(submittedAt - startTime).TotalMilliseconds) + rng.Next(500, 2500);
+                botUser.IsFinished = true;
+                botUser.FinishedAt = submittedAt;
+                botUser.ProgressPercentage = 100;
+            }
+            await _roomState.CreateRoomAsync(room);
+        }
+
         bool allFinished = room.Users.Values.All(u => u.IsFinished);
         if (allFinished)
         {
@@ -676,6 +720,79 @@ public class RoomService : IRoomService
             Category = room.Category,
             TotalPlayers = ordered.Count,
             Leaderboard = ordered
+        };
+    }
+
+    public async Task<ExamReviewDto?> GetRoomReviewAsync(Guid userId, string roomCode)
+    {
+        var room = await _roomState.GetRoomAsync(roomCode.ToUpper());
+        if (room == null || room.QuestionIds == null || room.QuestionIds.Count == 0) return null;
+
+        var questionEntities = await _db.Questions
+            .Where(q => room.QuestionIds.Contains(q.Id))
+            .ToDictionaryAsync(q => q.Id);
+
+        var uidStr = userId.ToString();
+        var userAnswers = new Dictionary<Guid, string>();
+        if (room.Users.TryGetValue(uidStr, out var rUser) && rUser.UserAnswers != null)
+        {
+            userAnswers = rUser.UserAnswers;
+        }
+
+        var questionsReview = new List<QuestionReviewDto>();
+
+        foreach (var qId in room.QuestionIds)
+        {
+            if (!questionEntities.TryGetValue(qId, out var q)) continue;
+
+            userAnswers.TryGetValue(qId, out var selectedAnswer);
+
+            bool isCorrect = false;
+            if (!string.IsNullOrWhiteSpace(selectedAnswer))
+            {
+                var correctTarget = (q.CorrectAnswer ?? string.Empty).Trim();
+                if (selectedAnswer.Contains(','))
+                {
+                    var opts = selectedAnswer.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                    isCorrect = opts.Any(opt => opt.Equals(correctTarget, StringComparison.OrdinalIgnoreCase));
+                }
+                else
+                {
+                    isCorrect = string.Equals(selectedAnswer.Trim(), correctTarget, StringComparison.OrdinalIgnoreCase);
+                }
+            }
+
+            string aiTip = isCorrect
+                ? "🎯 Tebrikler! Soruyu doğru kavradın ve doğru sonuca ulaştın."
+                : $"⚠️ Bu soruda doğru şık ({q.CorrectAnswer}). Çözüm adımında verilen formül ve öncülleri dikkatle incele.";
+
+            questionsReview.Add(new QuestionReviewDto
+            {
+                QuestionId = q.Id,
+                Branch = q.Branch,
+                QuestionText = q.QuestionText,
+                Choices = q.Choices,
+                CorrectAnswer = q.CorrectAnswer,
+                SelectedAnswer = selectedAnswer,
+                IsCorrect = isCorrect,
+                SolutionText = string.IsNullOrWhiteSpace(q.SolutionText)
+                    ? $"Doğru cevap {q.CorrectAnswer} şıkkıdır. Temel mantık çerçevesinde işlem yapıldığında doğru sonuca ulaşılmaktadır."
+                    : q.SolutionText,
+                ImageUrl = q.ImageUrl,
+                AiExplanationTip = aiTip
+            });
+        }
+
+        return new ExamReviewDto
+        {
+            ExamId = Guid.Empty,
+            ExamTitle = room.Title,
+            Category = room.Category,
+            CorrectCount = questionsReview.Count(q => q.IsCorrect),
+            WrongCount = questionsReview.Count(q => !string.IsNullOrEmpty(q.SelectedAnswer) && !q.IsCorrect),
+            BlankCount = questionsReview.Count(q => string.IsNullOrEmpty(q.SelectedAnswer)),
+            NetScore = questionsReview.Count(q => q.IsCorrect) - (questionsReview.Count(q => !string.IsNullOrEmpty(q.SelectedAnswer) && !q.IsCorrect) / 2.0m),
+            Questions = questionsReview
         };
     }
 

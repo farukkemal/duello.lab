@@ -46,6 +46,11 @@ const parseStoredUser = (): UserDto | null => {
       createdAt: parsed.createdAt || parsed.CreatedAt || '',
       role: parsed.role || parsed.Role || 'User',
       isBanned: parsed.isBanned ?? parsed.IsBanned ?? false,
+      avatar: parsed.avatar || parsed.Avatar || 'default',
+      title: parsed.title || parsed.Title || 'Savaşçı',
+      bio: parsed.bio || parsed.Bio || '',
+      clanName: parsed.clanName || parsed.ClanName,
+      clanTag: parsed.clanTag || parsed.ClanTag,
       jokerEliminateThree: parsed.jokerEliminateThree ?? parsed.JokerEliminateThree ?? 1,
       jokerDoubleChance: parsed.jokerDoubleChance ?? parsed.JokerDoubleChance ?? 1,
       jokerExtraTime: parsed.jokerExtraTime ?? parsed.JokerExtraTime ?? 1

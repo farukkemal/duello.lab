@@ -14,7 +14,10 @@ import MatchmakingModal from '../components/MatchmakingModal';
 import AiCoachReportModal from '../components/AiCoachReportModal';
 import BotMatchModal from '../components/BotMatchModal';
 import InstallPwaBanner from '../components/InstallPwaBanner';
+import UserProfileModal from '../components/UserProfileModal';
 import { getWeaknessReport, type AiCoachReport, type BranchPerformance } from '../api/analytics';
+import { updateProfile } from '../api/auth';
+import { AVATAR_LIST, TITLE_LIST, getAvatarIcon, getAvatarBg } from '../utils/avatars';
 import { isAudioMuted, toggleAudioMute } from '../utils/audio';
 import {
   CrossedSwordsGraphic,
@@ -65,10 +68,55 @@ export default function DashboardPage() {
   const [modalError, setModalError] = useState<string | null>(null);
 
   // Profile & Analytics state
-  const [profileSubTab, setProfileSubTab] = useState<'analizler' | 'genel' | 'envanter' | 'ayarlar'>('analizler');
+  const [profileSubTab, setProfileSubTab] = useState<'ozellestir' | 'analizler' | 'envanter' | 'genel' | 'ayarlar'>('ozellestir');
   const [aiReport, setAiReport] = useState<AiCoachReport | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [soundMuted, setSoundMuted] = useState(isAudioMuted());
+
+  // Customization edit state
+  const [selectedAvatar, setSelectedAvatar] = useState(user?.avatar || 'default');
+  const [selectedTitle, setSelectedTitle] = useState(user?.title || 'Savaşçı');
+  const [selectedBio, setSelectedBio] = useState(user?.bio || '');
+  const [avatarCategory, setAvatarCategory] = useState<'savasci' | 'ogrenci' | 'efsane'>('savasci');
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [profileSaveSuccess, setProfileSaveSuccess] = useState<string | null>(null);
+
+  // Inspect Player Modal state
+  const [inspectUser, setInspectUser] = useState<string | null>(null);
+  const [showInspectModal, setShowInspectModal] = useState(false);
+
+  useEffect(() => {
+    if (user) {
+      setSelectedAvatar(user.avatar || 'default');
+      setSelectedTitle(user.title || 'Savaşçı');
+      setSelectedBio(user.bio || '');
+    }
+  }, [user]);
+
+  const handleSaveProfile = async () => {
+    setIsSavingProfile(true);
+    setProfileSaveSuccess(null);
+    try {
+      await updateProfile({
+        avatar: selectedAvatar,
+        title: selectedTitle,
+        bio: selectedBio
+      });
+      await refreshUser();
+      setProfileSaveSuccess('🎉 Profiliniz ve avatarınız başarıyla güncellendi!');
+      setTimeout(() => setProfileSaveSuccess(null), 4000);
+    } catch (err: any) {
+      console.error('Failed to update profile:', err);
+      alert('Profil güncellenirken bir hata oluştu.');
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
+  const handleOpenInspect = (targetUser: string) => {
+    setInspectUser(targetUser);
+    setShowInspectModal(true);
+  };
 
   useEffect(() => {
     getSoloExams()
@@ -1005,39 +1053,54 @@ export default function DashboardPage() {
             <div className="space-y-4 animate-fadeIn">
               <div className="text-center py-2">
                 <h3 className="text-xl font-black text-white">🏆 Arena Podyumu</h3>
-                <p className="text-xs text-slate-400 mt-0.5">En yüksek net skora sahip savaşçılar</p>
+                <p className="text-xs text-slate-400 mt-0.5">En yüksek net skora sahip savaşçılar • Profili incelemek için tıkla</p>
               </div>
 
               <div className="bg-gradient-to-b from-[#1c2146] to-[#12142d] rounded-3xl p-4 border border-white/10 flex items-end justify-center gap-2 pt-6 shadow-xl">
-                <div className="flex-1 flex flex-col items-center">
-                  <div className="text-2xl mb-1">🥈</div>
-                  <div className="text-[11px] font-bold text-white truncate max-w-[80px]">Ayşe_K</div>
+                <div
+                  onClick={() => handleOpenInspect('Ayşe_K')}
+                  className="flex-1 flex flex-col items-center cursor-pointer hover:scale-105 transition-transform group"
+                  title="Ayşe_K Profilini İncele"
+                >
+                  <div className="text-2xl mb-1 group-hover:scale-110 transition-transform">🥈</div>
+                  <div className="text-[11px] font-bold text-white truncate max-w-[80px] group-hover:text-cyan-300">Ayşe_K</div>
                   <div className="text-[9px] font-mono text-cyan-400 font-bold mb-1">2.8 Net</div>
-                  <div className="w-full bg-slate-600/40 border-t-2 border-slate-400 rounded-t-xl h-20 flex items-center justify-center font-black text-slate-300 text-lg">
+                  <div className="w-full bg-slate-600/40 border-t-2 border-slate-400 rounded-t-xl h-20 flex items-center justify-center font-black text-slate-300 text-lg shadow-inner">
                     2
                   </div>
                 </div>
 
-                <div className="flex-1 flex flex-col items-center">
-                  <div className="text-3xl mb-1 animate-bounce-subtle">👑</div>
-                  <div className="text-xs font-black text-amber-300 truncate max-w-[90px]">Efe_YKS</div>
+                <div
+                  onClick={() => handleOpenInspect('Efe_YKS')}
+                  className="flex-1 flex flex-col items-center cursor-pointer hover:scale-105 transition-transform group"
+                  title="Efe_YKS Profilini İncele"
+                >
+                  <div className="text-3xl mb-1 animate-bounce-subtle group-hover:scale-110 transition-transform">👑</div>
+                  <div className="text-xs font-black text-amber-300 truncate max-w-[90px] group-hover:text-amber-200">Efe_YKS</div>
                   <div className="text-[10px] font-mono text-emerald-400 font-black mb-1">3.0 Net</div>
-                  <div className="w-full bg-amber-500/30 border-t-2 border-amber-400 rounded-t-xl h-28 flex flex-col items-center justify-center font-black text-amber-300 text-2xl">
+                  <div className="w-full bg-amber-500/30 border-t-2 border-amber-400 rounded-t-xl h-28 flex flex-col items-center justify-center font-black text-amber-300 text-2xl shadow-inner">
                     1
                   </div>
                 </div>
 
-                <div className="flex-1 flex flex-col items-center">
-                  <div className="text-2xl mb-1">🥉</div>
-                  <div className="text-[11px] font-bold text-white truncate max-w-[80px]">Mehmet_99</div>
+                <div
+                  onClick={() => handleOpenInspect('Mehmet_99')}
+                  className="flex-1 flex flex-col items-center cursor-pointer hover:scale-105 transition-transform group"
+                  title="Mehmet_99 Profilini İncele"
+                >
+                  <div className="text-2xl mb-1 group-hover:scale-110 transition-transform">🥉</div>
+                  <div className="text-[11px] font-bold text-white truncate max-w-[80px] group-hover:text-amber-400">Mehmet_99</div>
                   <div className="text-[9px] font-mono text-cyan-400 font-bold mb-1">2.5 Net</div>
-                  <div className="w-full bg-amber-900/40 border-t-2 border-amber-700 rounded-t-xl h-16 flex items-center justify-center font-black text-amber-600 text-base">
+                  <div className="w-full bg-amber-900/40 border-t-2 border-amber-700 rounded-t-xl h-16 flex items-center justify-center font-black text-amber-600 text-base shadow-inner">
                     3
                   </div>
                 </div>
               </div>
 
-              <div className="bg-[#171b38] border-2 border-violet-500 rounded-2xl p-3.5 flex items-center justify-between shadow-lg">
+              <div
+                onClick={() => handleOpenInspect(user.username)}
+                className="bg-[#171b38] border-2 border-violet-500 rounded-2xl p-3.5 flex items-center justify-between shadow-lg cursor-pointer hover:border-cyan-400 transition"
+              >
                 <div className="flex items-center gap-3">
                   <span className="font-mono font-black text-violet-400 text-lg">#4</span>
                   <div>
@@ -1066,25 +1129,43 @@ export default function DashboardPage() {
 
                 <div className="flex items-center justify-between">
                   <div className="text-left">
-                    <span className="inline-block bg-violet-500/20 text-violet-300 border border-violet-500/40 text-[9px] font-black px-2 py-0.5 rounded-full uppercase mb-1">
-                      {user.role === 'Admin' ? '👑 Yönetici' : '⚔️ Savaşçı'}
-                    </span>
+                    <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                      <span className="inline-block bg-violet-500/20 text-violet-300 border border-violet-500/40 text-[9px] font-black px-2 py-0.5 rounded-full uppercase">
+                        {user.title || (user.role === 'Admin' ? '👑 Yönetici' : '⚔️ Savaşçı')}
+                      </span>
+                      {user.clanName && (
+                        <span className="inline-block bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 text-[9px] font-black px-2 py-0.5 rounded-full uppercase font-mono">
+                          [{user.clanTag || 'KLAN'}] {user.clanName}
+                        </span>
+                      )}
+                    </div>
                     <h3 className="text-base sm:text-lg font-black text-white leading-tight flex items-center gap-1.5">
                       <span>{user.username}</span>
                       <span className="text-emerald-400 text-xs" title="Doğrulanmış Hesap">✓</span>
                     </h3>
-                    <p className="text-[10px] text-slate-400 font-mono truncate max-w-[180px]">{user.email}</p>
+                    {user.bio ? (
+                      <p className="text-[11px] text-slate-300 italic max-w-[200px] truncate">"{user.bio}"</p>
+                    ) : (
+                      <p className="text-[10px] text-slate-400 font-mono truncate max-w-[180px]">{user.email}</p>
+                    )}
                   </div>
 
                   {/* 3D Avatar */}
-                  <div className="relative">
-                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-violet-600 via-indigo-500 to-cyan-400 p-[2px] shadow-lg">
-                      <div className="w-full h-full bg-[#0d0f22] rounded-[14px] flex items-center justify-center text-2xl font-black text-white font-mono">
-                        {user?.username ? user.username.charAt(0).toUpperCase() : 'U'}
+                  <div
+                    onClick={() => setProfileSubTab('ozellestir')}
+                    className="relative cursor-pointer group"
+                    title="Avatar ve Profili Özelleştir"
+                  >
+                    <div className={`w-14 h-14 rounded-2xl bg-gradient-to-tr ${getAvatarBg(user.avatar)} p-[2px] shadow-lg group-hover:scale-105 transition-transform`}>
+                      <div className="w-full h-full bg-[#0d0f22] rounded-[14px] flex items-center justify-center text-2xl font-black text-white select-none">
+                        {getAvatarIcon(user.avatar, user.username)}
                       </div>
                     </div>
                     <div className="absolute -bottom-1.5 -right-1.5 bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 font-black text-[9px] px-1.5 py-0.2 rounded-full border-2 border-[#0d0f26] shadow">
                       Lv.{user?.level ?? 1}
+                    </div>
+                    <div className="absolute -top-1 -right-1 bg-violet-600 text-white rounded-full w-4 h-4 text-[9px] flex items-center justify-center border border-white shadow">
+                      ✏️
                     </div>
                   </div>
                 </div>
@@ -1132,10 +1213,28 @@ export default function DashboardPage() {
                     <div className="text-[11px] font-mono font-black text-cyan-400">{aiReport?.totalQuestionsSolved ?? Math.floor((user?.xp ?? 0) / 20)}</div>
                   </div>
                 </div>
+
+                {/* Direct Customize Shortcut Button */}
+                <button
+                  onClick={() => setProfileSubTab('ozellestir')}
+                  className="w-full py-3 rounded-2xl bg-gradient-to-r from-violet-600 via-indigo-600 to-cyan-500 hover:from-violet-500 hover:to-cyan-400 text-white font-black text-xs uppercase tracking-wider cursor-pointer shadow-lg active:scale-98 transition flex items-center justify-center gap-2 border border-violet-400/30"
+                >
+                  <span>🎭</span> <span>Avatar ve Profil Bilgilerini Değiştir ➔</span>
+                </button>
               </div>
 
               {/* 2. PROFILE SUB-TABS NAVIGATION */}
               <div className="flex bg-[#0f122c] p-1 rounded-2xl border border-white/10 gap-1 shadow-inner">
+                <button
+                  onClick={() => setProfileSubTab('ozellestir')}
+                  className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                    profileSubTab === 'ozellestir'
+                      ? 'bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-lg'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <span>🎨</span> <span>Avatar</span>
+                </button>
                 <button
                   onClick={() => setProfileSubTab('analizler')}
                   className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase transition-all flex items-center justify-center gap-1 cursor-pointer ${
@@ -1177,6 +1276,173 @@ export default function DashboardPage() {
                   <span>⚙️</span> <span>Ayar</span>
                 </button>
               </div>
+
+              {/* SUB-TAB: ÖZELLEŞTİR / AVATAR SEÇİMİ */}
+              {profileSubTab === 'ozellestir' && (
+                <div className="space-y-4 animate-fadeIn">
+                  
+                  {/* Live Preview Card */}
+                  <div className="bg-gradient-to-r from-[#171b3e] to-[#11142e] border-2 border-violet-500/40 rounded-3xl p-4 flex items-center gap-3.5 shadow-xl relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-500/10 rounded-full blur-2xl pointer-events-none" />
+                    
+                    <div className="relative shrink-0">
+                      <div className={`w-16 h-16 rounded-2xl bg-gradient-to-tr ${getAvatarBg(selectedAvatar)} p-[2px] shadow-lg flex items-center justify-center`}>
+                        <div className="w-full h-full bg-[#0d0f22] rounded-[14px] flex items-center justify-center text-3xl select-none">
+                          {getAvatarIcon(selectedAvatar, user.username)}
+                        </div>
+                      </div>
+                      <div className="absolute -bottom-1 -right-1 bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 font-black text-[9px] px-1.5 py-0.2 rounded-full border-2 border-[#0d0f26] shadow">
+                        Lv.{user.level}
+                      </div>
+                    </div>
+
+                    <div className="min-w-0 flex-1 space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-black text-white truncate">{user.username}</span>
+                      </div>
+                      <div className="inline-block px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider bg-violet-500/20 text-violet-300 border border-violet-500/30">
+                        {selectedTitle}
+                      </div>
+                      <p className="text-[11px] text-slate-300 italic truncate">
+                        "{selectedBio || 'Kişisel biyografinizi aşağıdan ekleyin...'}"
+                      </p>
+                    </div>
+                  </div>
+
+                  {profileSaveSuccess && (
+                    <div className="p-3 bg-emerald-950/60 border border-emerald-500/50 rounded-2xl text-emerald-300 text-xs font-bold text-center animate-bounce-subtle flex items-center justify-center gap-2">
+                      <span>✓</span> <span>{profileSaveSuccess}</span>
+                    </div>
+                  )}
+
+                  {/* 1. AVATAR SEÇİCİ */}
+                  <div className="bg-[#121533] border border-white/10 rounded-2xl p-4 space-y-3 shadow-lg">
+                    <div className="flex items-center justify-between">
+                      <div className="text-xs font-black text-white flex items-center gap-1.5">
+                        <span>🎭</span> <span>Avatar Seçimi</span>
+                      </div>
+                      <span className="text-[9px] text-slate-400">{AVATAR_LIST.length} Farklı Seçenek</span>
+                    </div>
+
+                    {/* Avatar Category Filters */}
+                    <div className="flex bg-black/30 p-1 rounded-xl border border-white/5 gap-1">
+                      <button
+                        onClick={() => setAvatarCategory('savasci')}
+                        className={`flex-1 py-1 rounded-lg text-[10px] font-black transition cursor-pointer ${
+                          avatarCategory === 'savasci' ? 'bg-violet-600 text-white shadow' : 'text-slate-400'
+                        }`}
+                      >
+                        ⚔️ Savaşçı
+                      </button>
+                      <button
+                        onClick={() => setAvatarCategory('ogrenci')}
+                        className={`flex-1 py-1 rounded-lg text-[10px] font-black transition cursor-pointer ${
+                          avatarCategory === 'ogrenci' ? 'bg-violet-600 text-white shadow' : 'text-slate-400'
+                        }`}
+                      >
+                        🎓 Akademik
+                      </button>
+                      <button
+                        onClick={() => setAvatarCategory('efsane')}
+                        className={`flex-1 py-1 rounded-lg text-[10px] font-black transition cursor-pointer ${
+                          avatarCategory === 'efsane' ? 'bg-violet-600 text-white shadow' : 'text-slate-400'
+                        }`}
+                      >
+                        💎 Efsaneler
+                      </button>
+                    </div>
+
+                    {/* Avatar Grid */}
+                    <div className="grid grid-cols-4 sm:grid-cols-6 gap-2.5 max-h-56 overflow-y-auto no-scrollbar p-1">
+                      {AVATAR_LIST.filter(a => a.category === avatarCategory).map((av) => {
+                        const isSelected = selectedAvatar === av.id;
+                        return (
+                          <button
+                            key={av.id}
+                            onClick={() => setSelectedAvatar(av.id)}
+                            className={`flex flex-col items-center justify-center p-2 rounded-2xl border-2 transition-all cursor-pointer relative ${
+                              isSelected
+                                ? 'bg-violet-600/30 border-violet-400 shadow-[0_0_12px_rgba(139,92,246,0.5)] scale-105'
+                                : 'bg-black/30 border-white/5 hover:border-white/20 hover:scale-102'
+                            }`}
+                          >
+                            <span className="text-2xl select-none">{av.icon}</span>
+                            <span className="text-[9px] font-bold text-slate-300 mt-1 truncate max-w-[50px]">{av.label}</span>
+                            {isSelected && (
+                              <span className="absolute -top-1 -right-1 w-4 h-4 bg-emerald-500 rounded-full text-[9px] text-slate-950 font-black flex items-center justify-center border border-white">
+                                ✓
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* 2. UNVAN VE BİYOGRAFİ DÜZENLEME */}
+                  <div className="bg-[#121533] border border-white/10 rounded-2xl p-4 space-y-3 shadow-lg">
+                    <div className="text-xs font-black text-white flex items-center gap-1.5">
+                      <span>🏷️</span> <span>Savaşçı Unvanı Seçimi</span>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                      {TITLE_LIST.map((t) => {
+                        const isSelected = selectedTitle === t;
+                        return (
+                          <button
+                            key={t}
+                            onClick={() => setSelectedTitle(t)}
+                            className={`py-2 px-2.5 rounded-xl text-[10px] font-black border text-left truncate transition cursor-pointer ${
+                              isSelected
+                                ? 'bg-violet-600 text-white border-violet-400 shadow-md'
+                                : 'bg-black/30 text-slate-400 border-white/5 hover:text-white'
+                            }`}
+                          >
+                            {isSelected ? '✓ ' : ''}{t}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Bio Input */}
+                    <div className="space-y-1.5 pt-2 border-t border-white/5">
+                      <label className="text-[10px] font-black text-slate-300 uppercase tracking-wider">
+                        Kişisel Biyografi & Slogan
+                      </label>
+                      <input
+                        type="text"
+                        maxLength={100}
+                        value={selectedBio}
+                        onChange={(e) => setSelectedBio(e.target.value)}
+                        placeholder="Örn: Hedef Boğaziçi Bilgisayar 🚀"
+                        className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-violet-500 font-semibold"
+                      />
+                      <div className="text-right text-[8px] text-slate-400 font-mono">
+                        {selectedBio.length}/100 Karakter
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Save Button */}
+                  <button
+                    disabled={isSavingProfile}
+                    onClick={handleSaveProfile}
+                    className="w-full py-4 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 text-slate-950 font-black text-xs uppercase tracking-wider cursor-pointer shadow-xl hover:brightness-110 active:scale-98 transition disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {isSavingProfile ? (
+                      <>
+                        <span className="w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
+                        <span>Kaydediliyor...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>💾</span> <span>Değişiklikleri Kaydet</span>
+                      </>
+                    )}
+                  </button>
+
+                </div>
+              )}
 
               {/* 3. SUB-TAB CONTENT: ANALİZLER (AI HEATMAP & WEAKNESS BREAKDOWN) */}
               {profileSubTab === 'analizler' && (
@@ -1468,6 +1734,32 @@ export default function DashboardPage() {
                     </div>
                   </div>
 
+                  {/* Avatar and Profile Customization in Settings */}
+                  <div className="bg-[#121533] border border-violet-500/30 rounded-2xl p-4 space-y-3 shadow-lg">
+                    <div className="text-xs font-black text-white uppercase tracking-wider flex items-center gap-1.5">
+                      <span>🎨</span> <span>Profil ve Avatar Görünümü</span>
+                    </div>
+                    <div className="flex items-center justify-between p-3 bg-black/30 rounded-xl border border-white/5">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-xl bg-gradient-to-tr ${getAvatarBg(user?.avatar)} p-[1.5px] flex items-center justify-center`}>
+                          <div className="w-full h-full bg-[#0d0f22] rounded-[9px] flex items-center justify-center text-xl select-none">
+                            {getAvatarIcon(user?.avatar, user?.username)}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-xs font-black text-white">{user?.username}</div>
+                          <div className="text-[10px] text-violet-300 font-bold">{user?.title || 'Savaşçı'}</div>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setProfileSubTab('ozellestir')}
+                        className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-black text-xs cursor-pointer shadow transition"
+                      >
+                        Avatarı Seç ➔
+                      </button>
+                    </div>
+                  </div>
+
                   <button
                     onClick={logout}
                     className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-rose-600 to-red-600 border-b-3 border-rose-900 text-white hover:from-rose-500 hover:to-red-500 font-black text-xs uppercase tracking-wider transition cursor-pointer shadow-lg active:translate-y-0.5 active:border-b-0"
@@ -1651,6 +1943,13 @@ export default function DashboardPage() {
         <BotMatchModal
           isOpen={showBotModal}
           onClose={() => setShowBotModal(false)}
+        />
+
+        {/* PUBLIC USER PROFILE MODAL */}
+        <UserProfileModal
+          isOpen={showInspectModal}
+          onClose={() => setShowInspectModal(false)}
+          userIdOrUsername={inspectUser}
         />
 
       </div>

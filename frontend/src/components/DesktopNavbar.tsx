@@ -7,6 +7,7 @@ import { triggerLevelUpConfetti } from '../utils/confetti';
 import { isAudioMuted, toggleAudioMute, playCoinSound } from '../utils/audio';
 import ViewModeToggle from './ViewModeToggle';
 import FriendsDrawer from './FriendsDrawer';
+import { getAvatarIcon, getAvatarBg } from '../utils/avatars';
 import type { MobileTab } from './MobileBottomNav';
 
 interface DesktopNavbarProps {
@@ -58,54 +59,47 @@ export default function DesktopNavbar({ activeTab, onSelectTab }: DesktopNavbarP
     { id: 'arena', label: 'Arena', icon: '🏠' },
     { id: 'duello', label: 'Düellolar', icon: '⚔️', badge: 'CANLI' },
     { id: 'klan', label: 'Klanlar', icon: '🏰', path: '/clan' },
-    { id: 'pratik', label: 'Pratik Sınav', icon: '📝' },
+    { id: 'pratik', label: 'Solo Pratik', icon: '🎯' },
+    { id: 'liderlik', label: 'Sıralama', icon: '🏆' },
     { id: 'magaza', label: 'Mağaza', icon: '🛒', path: '/shop' },
+    { id: 'profil', label: 'Profil', icon: '👤' },
   ];
 
-  const isProfileActive = activeTab === 'profil' && location.pathname === '/dashboard';
+  const isProfileActive = activeTab === 'profil';
 
   return (
     <>
-      <header className="sticky top-0 z-50 w-full bg-[#080a1a]/95 backdrop-blur-2xl border-b border-white/10 shadow-[0_4px_30px_rgba(0,0,0,0.5)] px-4 xl:px-8 py-2.5">
-        <div className="max-w-[1600px] mx-auto flex items-center justify-between gap-4">
+      <header className="sticky top-0 z-40 bg-[#0a0c20]/95 backdrop-blur-xl border-b border-white/10 px-4 lg:px-8 py-3 shadow-2xl">
+        <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
           
-          {/* ========================================================
-              1. LEFT: BRAND LOGO & MOTTO
-              ======================================================== */}
+          {/* 1. BRAND LOGO */}
           <div
             onClick={() => {
               onSelectTab('arena');
-              if (location.pathname !== '/dashboard') navigate('/dashboard?tab=arena');
+              if (location.pathname !== '/dashboard') navigate('/dashboard');
             }}
-            className="flex items-center gap-3 cursor-pointer group select-none shrink-0"
+            className="flex items-center gap-2.5 cursor-pointer group select-none"
           >
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-violet-600 via-indigo-600 to-cyan-400 p-[2px] shadow-lg shadow-violet-900/30 group-hover:shadow-violet-500/50 group-hover:scale-105 transition-all">
-              <div className="w-full h-full bg-[#090b1e] rounded-[14px] flex items-center justify-center text-xl font-black">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-violet-600 via-indigo-500 to-cyan-400 p-[2px] shadow-[0_0_20px_rgba(139,92,246,0.5)] group-hover:scale-105 transition-transform duration-300">
+              <div className="w-full h-full bg-[#0d0f26] rounded-[14px] flex items-center justify-center text-xl">
                 ⚔️
               </div>
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <span className="text-lg font-black text-white tracking-tight leading-none group-hover:text-cyan-300 transition-colors">
-                  duello<span className="text-violet-400">.lab</span>
-                </span>
-                <span className="bg-gradient-to-r from-violet-600 to-indigo-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded-md uppercase tracking-wider shadow">
-                  PRO
-                </span>
+              <div className="text-lg font-black text-white tracking-wider flex items-center gap-1.5">
+                <span>DÜELLO</span>
+                <span className="text-cyan-400 font-mono">.LAB</span>
               </div>
-              <p className="text-[10px] text-slate-400 font-mono mt-0.5">YKS Rekabet Arenası</p>
+              <div className="text-[10px] text-violet-400 font-bold uppercase tracking-widest -mt-1">
+                YKS Rekabet Arenası
+              </div>
             </div>
           </div>
 
-          {/* ========================================================
-              2. CENTER: SLEEK NAVIGATION TABS (NO WRAPPING)
-              ======================================================== */}
-          <nav className="flex items-center bg-[#11142f]/90 border border-white/10 rounded-2xl p-1 gap-1 shadow-inner shrink-0">
+          {/* 2. NAVIGATION LINKS */}
+          <nav className="hidden md:flex items-center gap-1 bg-[#121532] p-1.5 rounded-2xl border border-white/10 shadow-inner">
             {navItems.map((item) => {
-              const isActive =
-                (item.path && location.pathname === item.path) ||
-                (!item.path && activeTab === item.id && location.pathname === '/dashboard');
-
+              const isActive = (activeTab === item.id) && location.pathname === '/dashboard';
               return (
                 <button
                   key={item.id}
@@ -114,20 +108,19 @@ export default function DesktopNavbar({ activeTab, onSelectTab }: DesktopNavbarP
                       navigate(item.path);
                     } else {
                       onSelectTab(item.id);
-                      if (location.pathname !== '/dashboard') navigate(`/dashboard?tab=${item.id}`);
+                      if (location.pathname !== '/dashboard') navigate('/dashboard');
                     }
                   }}
-                  className={`relative flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-black whitespace-nowrap transition-all duration-200 cursor-pointer select-none ${
+                  className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-black transition-all cursor-pointer select-none relative ${
                     isActive
-                      ? 'bg-gradient-to-r from-violet-600 via-indigo-600 to-violet-700 text-white shadow-[0_0_15px_rgba(139,92,246,0.4)] border border-violet-400/40'
-                      : 'text-slate-300 hover:text-white hover:bg-white/8'
+                      ? 'bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-lg shadow-violet-900/40 scale-105'
+                      : 'text-slate-400 hover:text-white hover:bg-white/5'
                   }`}
                 >
                   <span className="text-sm">{item.icon}</span>
                   <span>{item.label}</span>
-
                   {item.badge && (
-                    <span className="text-[8px] bg-rose-500 text-white font-black px-1.5 py-0.5 rounded-full uppercase tracking-wider animate-pulse shadow">
+                    <span className="text-[8px] bg-rose-600 text-white px-1.5 py-0.2 rounded-full font-black animate-pulse">
                       {item.badge}
                     </span>
                   )}
@@ -136,26 +129,24 @@ export default function DesktopNavbar({ activeTab, onSelectTab }: DesktopNavbarP
             })}
           </nav>
 
-          {/* ========================================================
-              3. RIGHT: PLAYER STATS, WALLET, CONTROLS & PROFILE
-              ======================================================== */}
-          <div className="flex items-center gap-2.5 shrink-0">
+          {/* 3. USER HUD & ACTIONS */}
+          <div className="flex items-center gap-3">
             
-            {/* Friends Button */}
+            {/* Friends / Social Button */}
             <button
               onClick={() => setShowFriends(true)}
-              className="flex items-center gap-1.5 bg-[#121532] hover:bg-[#1b2046] border border-white/10 hover:border-violet-400/40 px-3 py-2 rounded-xl cursor-pointer active:scale-95 transition text-xs font-bold text-slate-200 shadow-sm whitespace-nowrap"
-              title="Çevrimiçi Arkadaşlar & İstekler"
+              className="flex items-center gap-1.5 bg-[#121532] hover:bg-[#1b2046] border border-white/10 hover:border-violet-400/50 px-3 py-2 rounded-xl text-xs font-black text-slate-300 hover:text-white transition cursor-pointer"
+              title="Arkadaşlar ve İstekler"
             >
               <span>🤝</span>
-              <span className="hidden xl:inline">Arkadaşlar</span>
+              <span className="hidden xl:inline">Sosyal</span>
             </button>
 
-            {/* Admin Panel shortcut */}
+            {/* Admin Shortcut */}
             {user.role === 'Admin' && (
               <button
                 onClick={() => navigate('/admin')}
-                className="flex items-center gap-1 bg-amber-500/15 border border-amber-500/30 hover:border-amber-400 px-3 py-2 rounded-xl cursor-pointer active:scale-95 transition text-xs font-bold text-amber-300 whitespace-nowrap"
+                className="flex items-center gap-1.5 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 hover:border-amber-400 px-3 py-2 rounded-xl text-xs font-black text-amber-300 transition cursor-pointer shadow-[0_0_15px_rgba(245,158,11,0.2)]"
                 title="Admin Yönetim Paneli"
               >
                 <span>👑</span>
@@ -166,14 +157,13 @@ export default function DesktopNavbar({ activeTab, onSelectTab }: DesktopNavbarP
             {/* Coin Wallet */}
             <div
               onClick={() => navigate('/shop')}
-              className="relative flex items-center gap-2 bg-[#121532] hover:bg-[#1b2046] border border-amber-400/40 hover:border-amber-400 px-3 py-1.5 rounded-xl shadow-inner cursor-pointer active:scale-95 transition"
+              className="relative flex items-center gap-2 bg-[#121532] border border-amber-500/30 hover:border-amber-400/60 px-3 py-2 rounded-xl shadow-inner cursor-pointer group select-none"
               title="Coin Mağazasına Git"
             >
-              <span className="text-base">💰</span>
-              <span className="font-mono font-black text-amber-300 text-xs sm:text-sm whitespace-nowrap">
+              <span className="text-sm group-hover:scale-125 transition-transform">💰</span>
+              <span className="font-mono font-black text-amber-400 text-xs">
                 {(user?.coinBalance ?? 0).toLocaleString()}
               </span>
-
               <button
                 onClick={handleClaim}
                 disabled={claiming}
@@ -204,9 +194,9 @@ export default function DesktopNavbar({ activeTab, onSelectTab }: DesktopNavbarP
               title="Profil ve Sınav Analizlerini Görüntüle"
             >
               <div className="relative">
-                <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-violet-600 to-cyan-400 p-[1.5px] shadow">
-                  <div className="w-full h-full bg-[#0d0f22] rounded-[9px] flex items-center justify-center font-black text-white text-xs font-mono">
-                    {user?.username ? user.username.charAt(0).toUpperCase() : 'U'}
+                <div className={`w-8 h-8 rounded-xl bg-gradient-to-tr ${getAvatarBg(user?.avatar)} p-[1.5px] shadow`}>
+                  <div className="w-full h-full bg-[#0d0f22] rounded-[9px] flex items-center justify-center font-black text-white text-sm select-none">
+                    {getAvatarIcon(user?.avatar, user?.username)}
                   </div>
                 </div>
                 <div className="absolute -bottom-1 -right-1 bg-amber-400 text-slate-950 font-black text-[8px] w-3.5 h-3.5 rounded-full flex items-center justify-center border border-slate-900 shadow">

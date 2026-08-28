@@ -72,6 +72,22 @@ public class RoomController : ControllerBase
         return Ok(result);
     }
 
+    [HttpGet("{roomCode}/leaderboard")]
+    public async Task<ActionResult<MatchEndedDto>> GetLeaderboard(string roomCode)
+    {
+        var result = await _roomService.GetRoomLeaderboardAsync(roomCode);
+        return Ok(result);
+    }
+
+    [HttpGet("{roomCode}/review")]
+    public async Task<ActionResult<object>> GetRoomReview(string roomCode)
+    {
+        var result = await _roomService.GetRoomReviewAsync(GetUserId(), roomCode);
+        if (result == null)
+            return NotFound(new { error = "Oda analizine ulaşılamadı." });
+        return Ok(result);
+    }
+
     [HttpPost("join")]
     public async Task<ActionResult<RoomResponseDto>> JoinRoom([FromBody] JoinRoomDto dto)
     {

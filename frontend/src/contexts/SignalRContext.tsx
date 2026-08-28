@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useRef, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, useRef, useCallback, type ReactNode } from 'react';
 import * as signalR from '@microsoft/signalr';
 import { useAuth } from './AuthContext';
 
@@ -19,6 +19,7 @@ interface SignalRContextType {
   latency: number | null;
   stats: OnlineStats | null;
   ping: () => Promise<number | null>;
+  ensureConnected: () => Promise<signalR.HubConnection | null>;
 }
 
 const SignalRContext = createContext<SignalRContextType | null>(null);
@@ -33,38 +34,44 @@ export function SignalRProvider({ children }: { children: ReactNode }) {
 
   const connectionRef = useRef<signalR.HubConnection | null>(null);
   const pingStartRef = useRef<number | null>(null);
+  const tokenRef = useRef<string | null>(null);
+  const reconnectingRef = useRef(false);
 
+  // Keep token in a ref so callbacks always see the latest value
   useEffect(() => {
-    if (!token) {
-      if (connectionRef.current) {
-        connectionRef.current.stop();
-        connectionRef.current = null;
-        setConnection(null);
-        setStatus('disconnected');
-        setConnectionId(null);
-      }
-      return;
-    }
+    tokenRef.current = token;
+  }, [token]);
 
+  const getHubUrl = useCallback(() => {
     const rawApiUrl = (import.meta.env.VITE_API_URL || '').trim();
     let apiBase = rawApiUrl.replace(/\/$/, '');
     if (!apiBase && typeof window !== 'undefined' && window.location.hostname === 'localhost') {
       apiBase = 'http://localhost:5000';
     }
-    const hubUrl = `${apiBase}/hubs/duello`;
+    return `${apiBase}/hubs/duello`;
+  }, []);
+
+  const buildAndStartConnection = useCallback(async (): Promise<signalR.HubConnection | null> => {
+    const currentToken = tokenRef.current;
+    if (!currentToken) return null;
+
+    // Stop any existing connection first
+    const oldConn = connectionRef.current;
+    if (oldConn) {
+      try { await oldConn.stop(); } catch { /* ignore */ }
+      connectionRef.current = null;
+    }
+
+    const hubUrl = getHubUrl();
 
     const newConnection = new signalR.HubConnectionBuilder()
       .withUrl(hubUrl, {
-        accessTokenFactory: () => token,
+        accessTokenFactory: () => tokenRef.current || '',
         transport: signalR.HttpTransportType.WebSockets | signalR.HttpTransportType.LongPolling,
       })
       .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
       .configureLogging(signalR.LogLevel.Warning)
       .build();
-
-    connectionRef.current = newConnection;
-    setConnection(newConnection);
-    setStatus('connecting');
 
     // Setup event listeners
     newConnection.on('ConnectedAck', (data: { connectionId: string; userId: string; username: string; isRedisActive: boolean; serverTime: string }) => {
@@ -94,10 +101,10 @@ export function SignalRProvider({ children }: { children: ReactNode }) {
       setStatus('reconnecting');
     });
 
-    newConnection.onreconnected((newConnectionId) => {
-      console.log('✅ [SignalR] Reconnected with ID:', newConnectionId);
+    newConnection.onreconnected((newConnId) => {
+      console.log('✅ [SignalR] Reconnected with ID:', newConnId);
       setStatus('connected');
-      if (newConnectionId) setConnectionId(newConnectionId);
+      if (newConnId) setConnectionId(newConnId);
     });
 
     newConnection.onclose((error) => {
@@ -106,55 +113,127 @@ export function SignalRProvider({ children }: { children: ReactNode }) {
       setConnectionId(null);
     });
 
-    // Start connection
-    newConnection
-      .start()
-      .then(async () => {
-        console.log('🚀 [SignalR] WebSocket connection established successfully.');
-        setStatus('connected');
-        // Initial ping measurement
-        try {
-          pingStartRef.current = performance.now();
-          await newConnection.invoke('Ping');
-          const currentStats = await newConnection.invoke<OnlineStats>('GetStats');
-          if (currentStats) setStats(currentStats);
-        } catch (e) {
-          console.warn('Initial ping/stats fetch warning:', e);
-        }
-      })
-      .catch((err) => {
-        console.error('❌ [SignalR] Connection Failed:', err);
-        setStatus('disconnected');
-      });
+    // Start
+    setStatus('connecting');
+    await newConnection.start();
+    console.log('🚀 [SignalR] Connection established successfully.');
+    setStatus('connected');
 
-    // Periodic heartbeat / ping every 10 seconds
-    const interval = setInterval(() => {
-      if (connectionRef.current && connectionRef.current.state === signalR.HubConnectionState.Connected) {
-        pingStartRef.current = performance.now();
-        connectionRef.current.invoke('Ping').catch(() => {});
+    connectionRef.current = newConnection;
+    setConnection(newConnection);
+
+    // Initial ping & stats
+    try {
+      pingStartRef.current = performance.now();
+      await newConnection.invoke('Ping');
+      const currentStats = await newConnection.invoke<OnlineStats>('GetStats');
+      if (currentStats) setStats(currentStats);
+    } catch (e) {
+      console.warn('Initial ping/stats fetch warning:', e);
+    }
+
+    return newConnection;
+  }, [getHubUrl]);
+
+  // Main effect: connect on mount when token is available
+  useEffect(() => {
+    if (!token) {
+      if (connectionRef.current) {
+        connectionRef.current.stop();
+        connectionRef.current = null;
+        setConnection(null);
+        setStatus('disconnected');
+        setConnectionId(null);
       }
-    }, 10000);
+      return;
+    }
+
+    let cancelled = false;
+
+    const connect = async () => {
+      try {
+        const conn = await buildAndStartConnection();
+        if (cancelled && conn) {
+          conn.stop();
+        }
+      } catch (err) {
+        console.error('❌ [SignalR] Initial connection failed:', err);
+        if (!cancelled) {
+          setStatus('disconnected');
+        }
+      }
+    };
+
+    connect();
+
+    // Periodic heartbeat / ping & auto-reconnect every 5 seconds
+    const interval = setInterval(async () => {
+      if (cancelled) return;
+      const conn = connectionRef.current;
+
+      if (conn && conn.state === signalR.HubConnectionState.Connected) {
+        // Healthy — just ping
+        pingStartRef.current = performance.now();
+        conn.invoke('Ping').catch(() => {});
+      } else if (tokenRef.current && !reconnectingRef.current) {
+        // Dead or no connection — rebuild from scratch
+        reconnectingRef.current = true;
+        console.log('🔄 [SignalR] Connection dead, rebuilding...');
+        try {
+          await buildAndStartConnection();
+        } catch (e) {
+          console.warn('Auto-reconnect rebuild failed:', e);
+          setStatus('disconnected');
+        } finally {
+          reconnectingRef.current = false;
+        }
+      }
+    }, 5000);
 
     return () => {
+      cancelled = true;
       clearInterval(interval);
       if (connectionRef.current) {
         connectionRef.current.stop();
         connectionRef.current = null;
       }
     };
-  }, [token, user?.id]);
+  }, [token, user?.id, buildAndStartConnection]);
 
-  const ping = async (): Promise<number | null> => {
-    if (connection && connection.state === signalR.HubConnectionState.Connected) {
+  const ensureConnected = useCallback(async (): Promise<signalR.HubConnection | null> => {
+    // Already connected? Return current connection.
+    const conn = connectionRef.current;
+    if (conn && conn.state === signalR.HubConnectionState.Connected) {
+      return conn;
+    }
+
+    // Not connected — build a fresh connection
+    if (!tokenRef.current) return null;
+
+    try {
+      const newConn = await buildAndStartConnection();
+      if (newConn && newConn.state === signalR.HubConnectionState.Connected) {
+        return newConn;
+      }
+      return null;
+    } catch (err) {
+      console.error('ensureConnected failed:', err);
+      return null;
+    }
+  }, [buildAndStartConnection]);
+
+  const ping = useCallback(async (): Promise<number | null> => {
+    const conn = connectionRef.current;
+    if (conn && conn.state === signalR.HubConnectionState.Connected) {
       pingStartRef.current = performance.now();
-      await connection.invoke('Ping');
+      await conn.invoke('Ping');
       return latency;
     }
     return null;
-  };
+  }, [latency]);
 
   return (
-    <SignalRContext.Provider value={{ connection, status, connectionId, latency, stats, ping }}>
+    <SignalRContext.Provider value={{ connection, status, connectionId, latency, stats, ping, ensureConnected }}>
       {children}
     </SignalRContext.Provider>
   );
