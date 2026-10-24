@@ -34,10 +34,10 @@ DATABASE_URL=postgresql://postgres:c7EZCn^!$A2xp#W@db.irvpnvzbxeovhcbbwgrz.supab
 ConnectionStrings__DefaultConnection=Host=db.irvpnvzbxeovhcbbwgrz.supabase.co;Port=5432;Database=postgres;Username=postgres;Password=c7EZCn^!$A2xp#W;SSL Mode=Require;Trust Server Certificate=true
 
 # Database Credentials
-POSTGRES_HOST=db.irvpnvzbxeovhcbbwgrz.supabase.co
+POSTGRES_HOST=dpg-dbeipobncjis73ecrupg-a.frankfurt-postgres.render.com
 POSTGRES_PORT=5432
-POSTGRES_DB=postgres
-POSTGRES_USER=postgres
+POSTGRES_DB=duello_lab_database
+POSTGRES_USER=duello_lab_database_user
 POSTGRES_PASSWORD=c7EZCn^!$A2xp#W
 
 # JWT Security
