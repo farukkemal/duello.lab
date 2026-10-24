@@ -1,52 +1,48 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { login, googleAuth } from '../api/auth';
+import { login } from '../api/auth';
 import { useAuth } from '../contexts/AuthContext';
-import GoogleLoginButton from '../components/GoogleLoginButton';
 
 export default function LoginPage() {
-  const [username, setUsername] = useState('');
+  const [username, setUsername] = useState(() => {
+    return localStorage.getItem('remember_username') || '';
+  });
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(() => {
+    return !!localStorage.getItem('remember_username');
+  });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [googleLoading, setGoogleLoading] = useState(false);
   const { setAuth } = useAuth();
   const navigate = useNavigate();
 
-  const handleGoogleSuccess = async (idToken: string) => {
-    setError('');
-    setGoogleLoading(true);
-    try {
-      const { data } = await googleAuth(idToken);
-      const receivedToken = data?.token || (data as any)?.Token;
-      const receivedUser = data?.user || (data as any)?.User;
-
-      if (receivedToken && receivedUser) {
-        setAuth(receivedToken, receivedUser);
-        navigate('/dashboard');
-      } else {
-        setError('Google oturum bilgileri doğrulanamadı.');
-      }
-    } catch (err: any) {
-      console.error('Google Login Error:', err);
-      if (err.response?.status === 503 || err.response?.status === 502) {
-        setError('⏳ Sunucu başlatılıyor / uyanıyor. Lütfen 15-20 saniye bekleyip tekrar deneyin.');
-      } else {
-        const serverMsg = err.response?.data?.error || err.response?.data?.message || err.message;
-        setError(serverMsg || 'Google ile giriş yapılamadı. Lütfen tekrar deneyin.');
-      }
-    } finally {
-      setGoogleLoading(false);
+  useEffect(() => {
+    const savedUsername = localStorage.getItem('remember_username');
+    if (savedUsername) {
+      setUsername(savedUsername);
+      setRememberMe(true);
     }
-  };
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+
+    const cleanUsername = username.trim();
+    if (!cleanUsername) {
+      setError('Lütfen kullanıcı adı veya e-posta girin.');
+      return;
+    }
+
+    if (!password) {
+      setError('Lütfen şifrenizi girin.');
+      return;
+    }
+
     setLoading(true);
     try {
-      const { data } = await login(username, password);
+      const { data } = await login(cleanUsername, password);
       const receivedToken = data?.token || (data as any)?.Token;
       const receivedUser = data?.user || (data as any)?.User;
 
@@ -54,14 +50,21 @@ export default function LoginPage() {
         throw new Error('Geçersiz sunucu yanıtı. Backend API adresi (VITE_API_URL) tanımlanmamış veya sunucuya ulaşılamıyor.');
       }
 
-      setAuth(receivedToken, receivedUser);
+      // Handle Remember Me
+      if (rememberMe) {
+        localStorage.setItem('remember_username', cleanUsername);
+      } else {
+        localStorage.removeItem('remember_username');
+      }
+
+      setAuth(receivedToken, receivedUser, rememberMe);
       navigate('/dashboard');
     } catch (err: any) {
       console.error('Login submit error:', err);
       if (err.response?.status === 503 || err.response?.status === 502) {
-        setError('⏳ Render sunucusu başlatılıyor / uyanıyor. Lütfen 20-30 saniye bekleyip tekrar deneyin.');
+        setError('⏳ Sunucu başlatılıyor / uyanıyor. Lütfen 20-30 saniye bekleyip tekrar deneyin.');
       } else if (err.code === 'ERR_NETWORK' || err.message?.includes('Network Error')) {
-        setError('🌐 Sunucuya bağlanılamadı. Render Backend servisinizin çalıştığından ve VITE_API_URL adresinin doğru olduğundan emin olun.');
+        setError('🌐 Sunucuya bağlanılamadı. Backend servisinizin çalıştığından ve VITE_API_URL adresinin doğru olduğundan emin olun.');
       } else {
         const serverError = err.response?.data?.error || err.response?.data?.message || err.message;
         setError(serverError || 'Giriş yapılamadı. Kullanıcı adı veya şifrenizi kontrol edin.');
@@ -117,6 +120,7 @@ export default function LoginPage() {
                 onChange={(e) => setUsername(e.target.value)}
                 className="w-full bg-[#10132b] border border-white/10 rounded-xl px-3.5 py-3 text-white text-xs font-bold focus:outline-none focus:border-violet-500 transition"
                 required
+                autoComplete="username"
               />
             </div>
 
@@ -132,42 +136,42 @@ export default function LoginPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   className="w-full bg-[#10132b] border border-white/10 rounded-xl px-3.5 py-3 text-white text-xs font-bold focus:outline-none focus:border-violet-500 transition pr-10"
                   required
+                  autoComplete="current-password"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-bold"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-bold hover:text-white transition"
+                  tabIndex={-1}
                 >
                   {showPassword ? '🙈' : '👁️'}
                 </button>
               </div>
             </div>
 
+            {/* Beni Hatırla (Remember Me) */}
+            <div className="flex items-center justify-between pt-1">
+              <label className="flex items-center gap-2.5 cursor-pointer select-none group">
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  className="w-4 h-4 rounded border-white/20 bg-[#10132b] text-violet-600 focus:ring-0 focus:ring-offset-0 cursor-pointer accent-violet-600"
+                />
+                <span className="text-xs font-bold text-slate-300 group-hover:text-white transition">
+                  Beni Hatırla
+                </span>
+              </label>
+            </div>
+
             <button
               type="submit"
-              disabled={loading || googleLoading}
-              className="w-full py-4 rounded-2xl btn-game-primary text-white font-black text-sm uppercase tracking-wider cursor-pointer disabled:opacity-50 mt-2"
+              disabled={loading}
+              className="w-full py-4 rounded-2xl btn-game-primary text-white font-black text-sm uppercase tracking-wider cursor-pointer disabled:opacity-50 mt-2 shadow-lg"
             >
               {loading ? 'Giriş Yapılıyor...' : 'Arenaya Gir ➔'}
             </button>
           </form>
-
-          {/* Divider */}
-          <div className="relative flex items-center justify-center my-3">
-            <div className="border-t border-white/10 w-full" />
-            <span className="bg-[#131633] px-3 text-[10px] font-black uppercase tracking-wider text-slate-400 select-none">
-              veya
-            </span>
-            <div className="border-t border-white/10 w-full" />
-          </div>
-
-          {/* Google Sign In Button */}
-          <GoogleLoginButton
-            text="signin_with"
-            isLoading={googleLoading}
-            onSuccess={handleGoogleSuccess}
-            onError={(err) => setError(err)}
-          />
         </div>
 
         {/* Footer Link */}

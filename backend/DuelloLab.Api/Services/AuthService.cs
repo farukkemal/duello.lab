@@ -19,13 +19,13 @@ public class AuthService : IAuthService
     public async Task<AuthResponseDto> RegisterAsync(RegisterDto dto)
     {
         var username = (dto.Username ?? string.Empty).Trim();
-        var email = (dto.Email ?? string.Empty).Trim().ToLower();
+        var email = string.IsNullOrWhiteSpace(dto.Email) ? $"{username.ToLowerInvariant()}@duello.lab" : dto.Email.Trim().ToLowerInvariant();
         var password = dto.Password ?? string.Empty;
 
         if (string.IsNullOrWhiteSpace(username) || username.Length < 3)
             throw new InvalidOperationException("Kullanıcı adı en az 3 karakter olmalıdır.");
 
-        if (string.IsNullOrWhiteSpace(email) || !email.Contains('@'))
+        if (!email.Contains('@'))
             throw new InvalidOperationException("Geçerli bir e-posta adresi giriniz.");
 
         if (string.IsNullOrWhiteSpace(password) || password.Length < 6)

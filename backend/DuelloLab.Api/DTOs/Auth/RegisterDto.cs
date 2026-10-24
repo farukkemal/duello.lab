@@ -9,9 +9,8 @@ public class RegisterDto
     [MaxLength(50)]
     public string Username { get; set; } = string.Empty;
 
-    [Required]
     [EmailAddress]
-    public string Email { get; set; } = string.Empty;
+    public string? Email { get; set; }
 
     [Required]
     [MinLength(6)]

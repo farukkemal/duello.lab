@@ -1,53 +1,42 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { register, googleAuth } from '../api/auth';
+import { register } from '../api/auth';
 import { useAuth } from '../contexts/AuthContext';
-import GoogleLoginButton from '../components/GoogleLoginButton';
 
 export default function RegisterPage() {
   const [username, setUsername] = useState('');
-  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [googleLoading, setGoogleLoading] = useState(false);
   const { setAuth } = useAuth();
   const navigate = useNavigate();
-
-  const handleGoogleSuccess = async (idToken: string) => {
-    setError('');
-    setGoogleLoading(true);
-    try {
-      const { data } = await googleAuth(idToken);
-      const receivedToken = data?.token || (data as any)?.Token;
-      const receivedUser = data?.user || (data as any)?.User;
-
-      if (receivedToken && receivedUser) {
-        setAuth(receivedToken, receivedUser);
-        navigate('/dashboard');
-      } else {
-        setError('Google oturum bilgileri doğrulanamadı.');
-      }
-    } catch (err: any) {
-      console.error('Google Register Error:', err);
-      if (err.response?.status === 503 || err.response?.status === 502) {
-        setError('⏳ Sunucu başlatılıyor / uyanıyor. Lütfen 15-20 saniye bekleyip tekrar deneyin.');
-      } else {
-        const serverMsg = err.response?.data?.error || err.response?.data?.message || err.message;
-        setError(serverMsg || 'Google ile kayıt işlemi yapılamadı. Lütfen tekrar deneyin.');
-      }
-    } finally {
-      setGoogleLoading(false);
-    }
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+
+    const cleanUsername = username.trim();
+    if (cleanUsername.length < 3) {
+      setError('Kullanıcı adı en az 3 karakter olmalıdır.');
+      return;
+    }
+
+    if (password.length < 6) {
+      setError('Şifre en az 6 karakter olmalıdır.');
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setError('Şifreler birbiriyle eşleşmiyor! Lütfen iki şifreyi de aynı girin.');
+      return;
+    }
+
     setLoading(true);
     try {
-      const { data } = await register(username, email, password);
+      const { data } = await register(cleanUsername, password);
       const receivedToken = data?.token || (data as any)?.Token;
       const receivedUser = data?.user || (data as any)?.User;
 
@@ -55,14 +44,14 @@ export default function RegisterPage() {
         throw new Error('Geçersiz sunucu yanıtı. Backend API adresi (VITE_API_URL) tanımlanmamış veya sunucuya ulaşılamıyor.');
       }
 
-      setAuth(receivedToken, receivedUser);
+      setAuth(receivedToken, receivedUser, true);
       navigate('/dashboard');
     } catch (err: any) {
       console.error('Register submit error:', err);
       if (err.response?.status === 503 || err.response?.status === 502) {
-        setError('⏳ Render sunucusu başlatılıyor / uyanıyor. Lütfen 20-30 saniye bekleyip tekrar deneyin.');
+        setError('⏳ Sunucu başlatılıyor / uyanıyor. Lütfen 20-30 saniye bekleyip tekrar deneyin.');
       } else if (err.code === 'ERR_NETWORK' || err.message?.includes('Network Error')) {
-        setError('🌐 Sunucuya bağlanılamadı. Render Backend servisinizin çalıştığından ve VITE_API_URL adresinin doğru olduğundan emin olun.');
+        setError('🌐 Sunucuya bağlanılamadı. Backend servisinizin çalıştığından ve VITE_API_URL adresinin doğru olduğundan emin olun.');
       } else {
         const serverError = err.response?.data?.error || err.response?.data?.message || err.message;
         setError(serverError || 'Kayıt işlemi başarısız. Lütfen bilgilerinizi kontrol edin.');
@@ -106,7 +95,8 @@ export default function RegisterPage() {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-3">
+          <form onSubmit={handleSubmit} className="space-y-3.5">
+            {/* Kullanıcı Adı */}
             <div>
               <label className="block text-[10px] font-black text-slate-300 mb-1 uppercase tracking-wider">
                 Kullanıcı Adı
@@ -116,26 +106,15 @@ export default function RegisterPage() {
                 placeholder="örn: yks_sampiyonu"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className="w-full bg-[#10132b] border border-white/10 rounded-xl px-3.5 py-2.5 text-white text-xs font-bold focus:outline-none focus:border-violet-500 transition"
+                className="w-full bg-[#10132b] border border-white/10 rounded-xl px-3.5 py-2.5 text-white text-xs font-bold focus:outline-none focus:border-amber-400 transition"
                 required
                 minLength={3}
+                maxLength={30}
+                autoComplete="username"
               />
             </div>
 
-            <div>
-              <label className="block text-[10px] font-black text-slate-300 mb-1 uppercase tracking-wider">
-                E-posta
-              </label>
-              <input
-                type="email"
-                placeholder="ornek@duello.lab"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full bg-[#10132b] border border-white/10 rounded-xl px-3.5 py-2.5 text-white text-xs font-bold focus:outline-none focus:border-violet-500 transition"
-                required
-              />
-            </div>
-
+            {/* Şifre */}
             <div>
               <label className="block text-[10px] font-black text-slate-300 mb-1 uppercase tracking-wider">
                 Şifre
@@ -146,52 +125,73 @@ export default function RegisterPage() {
                   placeholder="En az 6 karakter"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-[#10132b] border border-white/10 rounded-xl px-3.5 py-2.5 text-white text-xs font-bold focus:outline-none focus:border-violet-500 transition pr-10"
+                  className="w-full bg-[#10132b] border border-white/10 rounded-xl px-3.5 py-2.5 text-white text-xs font-bold focus:outline-none focus:border-amber-400 transition pr-10"
                   required
                   minLength={6}
+                  autoComplete="new-password"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-bold"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-bold hover:text-white transition"
+                  tabIndex={-1}
                 >
                   {showPassword ? '🙈' : '👁️'}
                 </button>
               </div>
             </div>
 
+            {/* Şifreyi Tekrar Girin */}
+            <div>
+              <label className="block text-[10px] font-black text-slate-300 mb-1 uppercase tracking-wider">
+                Şifreyi Tekrar Girin
+              </label>
+              <div className="relative">
+                <input
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  placeholder="Şifrenizi doğrulayın"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className={`w-full bg-[#10132b] border rounded-xl px-3.5 py-2.5 text-white text-xs font-bold focus:outline-none transition pr-10 ${
+                    confirmPassword && confirmPassword !== password
+                      ? 'border-rose-500/80 focus:border-rose-500'
+                      : 'border-white/10 focus:border-amber-400'
+                  }`}
+                  required
+                  minLength={6}
+                  autoComplete="new-password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-bold hover:text-white transition"
+                  tabIndex={-1}
+                >
+                  {showConfirmPassword ? '🙈' : '👁️'}
+                </button>
+              </div>
+              {confirmPassword && confirmPassword !== password && (
+                <p className="text-[10px] text-rose-400 font-bold mt-1">
+                  ⚠️ Şifreler henüz eşleşmiyor
+                </p>
+              )}
+            </div>
+
             <button
               type="submit"
-              disabled={loading || googleLoading}
-              className="w-full py-3.5 rounded-2xl btn-game-gold text-slate-950 font-black text-xs uppercase tracking-wider cursor-pointer disabled:opacity-50 mt-2"
+              disabled={loading}
+              className="w-full py-3.5 rounded-2xl btn-game-gold text-slate-950 font-black text-xs uppercase tracking-wider cursor-pointer disabled:opacity-50 mt-3 shadow-lg"
             >
               {loading ? 'Hesap Açılıyor...' : '🎁 100 Coin ile Kayıt Ol'}
             </button>
           </form>
-
-          {/* Divider */}
-          <div className="relative flex items-center justify-center my-3">
-            <div className="border-t border-white/10 w-full" />
-            <span className="bg-[#131633] px-3 text-[10px] font-black uppercase tracking-wider text-slate-400 select-none">
-              veya
-            </span>
-            <div className="border-t border-white/10 w-full" />
-          </div>
-
-          {/* Google Sign Up Button */}
-          <GoogleLoginButton
-            text="signup_with"
-            isLoading={googleLoading}
-            onSuccess={handleGoogleSuccess}
-            onError={(err) => setError(err)}
-          />
         </div>
 
         {/* Footer Link */}
-        <div className="text-center pb-2">
+        <div className="text-center pb-4">
           <p className="text-xs text-slate-400 font-bold">
             Zaten hesabın var mı?{' '}
-            <Link to="/login" className="text-violet-400 hover:underline">
+            <Link to="/login" className="text-amber-400 hover:underline">
               Giriş Yap
             </Link>
           </p>

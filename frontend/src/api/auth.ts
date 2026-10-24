@@ -65,11 +65,15 @@ export interface AuthResponse {
   user: UserDto;
 }
 
-export const register = (username: string, email: string, password: string) =>
-  api.post<AuthResponse>('/auth/register', { username, email, password });
+export const register = (username: string, password: string, email?: string) =>
+  api.post<AuthResponse>('/auth/register', { 
+    username: username.trim(), 
+    password, 
+    email: email && email.trim().length > 0 ? email.trim() : `${username.trim().toLowerCase()}@duello.lab` 
+  });
 
 export const login = (username: string, password: string) =>
-  api.post<AuthResponse>('/auth/login', { username, password });
+  api.post<AuthResponse>('/auth/login', { username: username.trim(), password });
 
 export const googleAuth = (idToken: string) =>
   api.post<AuthResponse>('/auth/google', { idToken });

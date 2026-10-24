@@ -4,7 +4,7 @@ import { type UserDto, getMe } from '../api/auth';
 interface AuthContextType {
   user: UserDto | null;
   token: string | null;
-  setAuth: (token: string, user: UserDto) => void;
+  setAuth: (token: string, user: UserDto, rememberMe?: boolean) => void;
   logout: () => void;
   refreshUser: () => Promise<void>;
   isLoading: boolean;
@@ -14,17 +14,20 @@ const AuthContext = createContext<AuthContextType | null>(null);
 
 const parseStoredUser = (): UserDto | null => {
   try {
-    const token = localStorage.getItem('token');
-    const saved = localStorage.getItem('user');
+    const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+    const saved = localStorage.getItem('user') || sessionStorage.getItem('user');
 
     if (!token || token === 'undefined' || token === 'null' || token.trim() === '') {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
+      sessionStorage.removeItem('token');
+      sessionStorage.removeItem('user');
       return null;
     }
 
     if (!saved || saved === 'undefined' || saved === 'null') {
       localStorage.removeItem('user');
+      sessionStorage.removeItem('user');
       return null;
     }
 
@@ -33,6 +36,8 @@ const parseStoredUser = (): UserDto | null => {
     if (!parsed || typeof parsed !== 'object' || !userId) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
+      sessionStorage.removeItem('token');
+      sessionStorage.removeItem('user');
       return null;
     }
 
@@ -58,6 +63,8 @@ const parseStoredUser = (): UserDto | null => {
   } catch {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    sessionStorage.removeItem('token');
+    sessionStorage.removeItem('user');
     return null;
   }
 };
@@ -65,18 +72,29 @@ const parseStoredUser = (): UserDto | null => {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserDto | null>(parseStoredUser);
   const [token, setToken] = useState<string | null>(() => {
-    const t = localStorage.getItem('token');
+    const t = localStorage.getItem('token') || sessionStorage.getItem('token');
     return t && t !== 'undefined' && t !== 'null' && t.trim() !== '' ? t : null;
   });
   const [isLoading, setIsLoading] = useState(false);
 
-  const setAuth = (newToken: string, newUser: UserDto) => {
+  const setAuth = (newToken: string, newUser: UserDto, rememberMe: boolean = true) => {
     if (!newToken || !newUser || !newUser.id) {
       console.error('Invalid setAuth call. Missing token or user ID:', { newToken, newUser });
       return;
     }
-    localStorage.setItem('token', newToken);
-    localStorage.setItem('user', JSON.stringify(newUser));
+
+    if (rememberMe) {
+      localStorage.setItem('token', newToken);
+      localStorage.setItem('user', JSON.stringify(newUser));
+      sessionStorage.removeItem('token');
+      sessionStorage.removeItem('user');
+    } else {
+      sessionStorage.setItem('token', newToken);
+      sessionStorage.setItem('user', JSON.stringify(newUser));
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+    }
+
     setToken(newToken);
     setUser(newUser);
   };
@@ -84,6 +102,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    sessionStorage.removeItem('token');
+    sessionStorage.removeItem('user');
     setToken(null);
     setUser(null);
   };
@@ -97,7 +117,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
       setUser(data);
-      localStorage.setItem('user', JSON.stringify(data));
+      if (localStorage.getItem('token')) {
+        localStorage.setItem('user', JSON.stringify(data));
+      } else {
+        sessionStorage.setItem('user', JSON.stringify(data));
+      }
     } catch (err: any) {
       if (err?.response?.status === 401 || err?.response?.status === 403) {
         logout();

@@ -24,7 +24,7 @@ api.interceptors.request.use((config) => {
                                url.includes('/auth/google');
 
   if (!isPublicAuthEndpoint) {
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem('token') || sessionStorage.getItem('token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -53,6 +53,8 @@ api.interceptors.response.use(
     if (error.response?.status === 401 && !isPublicAuthEndpoint) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
+      sessionStorage.removeItem('token');
+      sessionStorage.removeItem('user');
 
       if (typeof window !== 'undefined') {
         const currentPath = window.location.pathname;
